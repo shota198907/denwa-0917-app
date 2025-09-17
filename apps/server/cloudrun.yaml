@@ -1,0 +1,16 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: voice-dialog-service
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/concurrency: "1"
+    spec:
+      containerConcurrency: 1
+      timeoutSeconds: 3600
+      containers:
+        - image: gcr.io/denwa-0917/voice-dialog-server:latest
+          ports:
+            - containerPort: 8080

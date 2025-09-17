@@ -1,39 +1,77 @@
-import express, { Request, Response, NextFunction } from "express";
-import crypto from "crypto";
-import { WebSocketServer } from "ws";
+import http from "node:http";
+import { URL } from "node:url";
+import express from "express";
+import WebSocket, { WebSocketServer } from "ws";
+import { env } from "./env";
+import { corsMiddleware } from "./middleware/cors";
+import { requestLoggingMiddleware } from "./middleware/logging";
+import { healthRouter } from "./routes/health";
+import { tokenRouter } from "./routes/token";
+import { registerWsProxy } from "./routes/ws-proxy";
 
 const app = express();
-const port = Number(process.env.PORT) || 8080;
-const allowedOrigin = process.env.ALLOWED_ORIGIN || "http://localhost:5173";
+app.disable("x-powered-by");
+app.use(express.json({ limit: "1mb" }));
+app.use(requestLoggingMiddleware);
+app.use(corsMiddleware);
 
-app.use((req: Request, res: Response, next: NextFunction) => {
-  res.header("Access-Control-Allow-Origin", allowedOrigin);
-  res.header("Vary", "Origin");
-  res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  if (req.method === "OPTIONS") return res.status(204).end();
-  next();
-});
+app.use("/health", healthRouter);
+app.use("/token", tokenRouter);
 
-app.get("/health", (_req: Request, res: Response) => {
-  res.json({ status: "ok" });
-});
+const server = http.createServer(app);
 
-// 開発用ダミーの /token
-app.get("/token", (_req: Request, res: Response) => {
-  const hasKey = typeof process.env.GEMINI_API_KEY === "string" && process.env.GEMINI_API_KEY.length > 0;
-  const token = "dev-" + crypto.randomBytes(12).toString("hex");
-  res.json({ token, dev: true, geminiApiKeyLoaded: hasKey, expiresInSec: 600 });
-});
+const proxyWss = new WebSocketServer({ noServer: true });
+const echoWss = new WebSocketServer({ noServer: true });
 
-// HTTPサーバで待受（Cloud Run は 0.0.0.0 必須）
-const server = app.listen(port, "0.0.0.0", () => {
-  console.log(`Server listening on http://0.0.0.0:${port}`);
-});
-
-// /echo（WebSocketエコー：疎通確認用）
-const wss = new WebSocketServer({ server, path: "/echo" });
-wss.on("connection", (socket) => {
+echoWss.on("connection", (socket: WebSocket) => {
   socket.send(JSON.stringify({ hello: "ws", time: Date.now() }));
-  socket.on("message", (data) => socket.send(data));
+  socket.on("message", (data, isBinary) => {
+    try {
+      socket.send(data, { binary: isBinary });
+    } catch (error) {
+      console.error("echo ws send failed", error);
+    }
+  });
 });
+
+registerWsProxy(proxyWss);
+
+server.on("upgrade", (req, socket, head) => {
+  const host = req.headers.host ?? `localhost:${env.port}`;
+  let pathname = "/";
+  try {
+    pathname = new URL(req.url ?? "/", `http://${host}`).pathname;
+  } catch (error) {
+    console.error("Failed to parse upgrade URL", error);
+  }
+
+  if (pathname === "/ws-proxy") {
+    proxyWss.handleUpgrade(req, socket, head, (ws) => {
+      proxyWss.emit("connection", ws, req);
+    });
+    return;
+  }
+
+  if (pathname === "/echo") {
+    echoWss.handleUpgrade(req, socket, head, (ws) => {
+      echoWss.emit("connection", ws, req);
+    });
+    return;
+  }
+
+  socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+  socket.destroy();
+});
+
+server.listen(env.port, "0.0.0.0", () => {
+  console.log(`Server listening on http://0.0.0.0:${env.port}`);
+});
+
+const gracefulShutdown = () => {
+  proxyWss.close();
+  echoWss.close();
+  server.close(() => process.exit(0));
+};
+
+process.on("SIGTERM", gracefulShutdown);
+process.on("SIGINT", gracefulShutdown);
