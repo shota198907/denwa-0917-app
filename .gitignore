@@ -1,0 +1,14 @@
+
+# --- workspace common ---
+.DS_Store
+.env
+.env.*
+**/.env.local
+
+# deps & build
+node_modules/
+**/node_modules/
+dist/
+build/
+.vite/
+coverage/

@@ -1,0 +1,8 @@
+{
+  "name": "denwa-0917",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}
