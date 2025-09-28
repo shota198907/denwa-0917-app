@@ -19,6 +19,7 @@ export interface ConversationState {
   readonly isUserSpeaking: boolean;
   readonly isAssistantSpeaking: boolean;
   readonly lastActivity: Date;
+  readonly isUserTranscriptionEnabled: boolean;
 }
 
 export class ConversationStore {
@@ -30,6 +31,7 @@ export class ConversationStore {
   private lastActivity = new Date();
   private currentUserTurnId?: number;
   private currentAssistantTurnId?: number;
+  private isUserTranscriptionEnabled = true;
 
   /**
    * 現在の会話状態を取得
@@ -42,6 +44,7 @@ export class ConversationStore {
       isUserSpeaking: this.isUserSpeaking,
       isAssistantSpeaking: this.isAssistantSpeaking,
       lastActivity: this.lastActivity,
+      isUserTranscriptionEnabled: this.isUserTranscriptionEnabled,
     };
   }
 
@@ -61,6 +64,13 @@ export class ConversationStore {
   public updateUserText(text: string): void {
     if (!this.isUserSpeaking) {
       this.startUserSpeaking();
+    }
+    
+    // 文字起こしが無効な場合は「文字起こしオフ」と表示
+    if (!this.isUserTranscriptionEnabled) {
+      this.currentUserText = '文字起こしオフ';
+      this.lastActivity = new Date();
+      return;
     }
     
     const trimmed = text.trim();
@@ -271,5 +281,24 @@ export class ConversationStore {
     this.isUserSpeaking = userSpeaking;
     this.isAssistantSpeaking = assistantSpeaking;
     this.lastActivity = new Date();
+  }
+
+  /**
+   * ユーザー文字起こしの有効/無効を設定
+   */
+  public setUserTranscriptionEnabled(enabled: boolean): void {
+    this.isUserTranscriptionEnabled = enabled;
+    this.lastActivity = new Date();
+  }
+
+  /**
+   * 割り込み時の発言確定処理
+   * ユーザーが話し出したら、アシスタントの発言をいったん確定
+   */
+  public handleInterruption(): void {
+    if (this.isAssistantSpeaking && this.currentAssistantText.length > 0) {
+      // アシスタントの発言をいったん確定
+      this.commitAssistantMessage();
+    }
   }
 }

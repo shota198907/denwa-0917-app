@@ -109,6 +109,8 @@ export const LiveTestPage: React.FC = () => {
     commitAssistantTurn,
     clearHistory,
     setTranscriptionDisabled,
+    setUserTranscriptionEnabled,
+    handleInterruption,
     updateAudioStatus,
   } = useConversation();
 
@@ -303,15 +305,31 @@ export const LiveTestPage: React.FC = () => {
           startAssistantSpeaking();
           updateAssistantText(trimmed);
         },
+        onModelText: (text, isComplete, turnId) => {
+          // モデルの発話テキストを処理
+          if (isComplete) {
+            // 鐘が来た場合：発言を確定
+            startAssistantSpeaking(turnId);
+            updateAssistantText(text);
+            commitAssistantTurn();
+          } else {
+            // 途中のテキスト：蓄積
+            startAssistantSpeaking(turnId);
+            updateAssistantText(text);
+          }
+        },
       });
     }
     return sessionRef.current;
-  }, [pushLog, wsUrl, startAssistantSpeaking, updateAssistantText, commitAssistantTurn]);
+  }, [pushLog, wsUrl, startAssistantSpeaking, updateAssistantText, commitAssistantTurn, handleInterruption]);
 
   const { isSpeech, energy, attach, detach } = useVAD({
     onSpeechStart: () => {
       pushLog("[vad] speech detected (client)");
       sessionRef.current?.interruptPlayback("barge-in");
+      
+      // 割り込み処理：アシスタントの発言をいったん確定
+      handleInterruption();
       
       // ユーザーの発言開始
       startUserSpeaking();
@@ -405,7 +423,7 @@ export const LiveTestPage: React.FC = () => {
       const message = error instanceof Error ? error.message : String(error);
       pushLog(`[error] mic start failed: ${message}`);
     }
-  }, [attach, ensureSession, pushLog, resetSilencePrompt, setTranscriptionDisabled]);
+  }, [attach, ensureSession, pushLog, resetSilencePrompt, setTranscriptionDisabled, setUserTranscriptionEnabled]);
 
   const stopMic = useCallback(() => {
     const session = sessionRef.current;
@@ -428,7 +446,7 @@ export const LiveTestPage: React.FC = () => {
       endAssistantSpeaking(true);
       updateAudioStatus(false, false);
     };
-  }, [detach, resetSilencePrompt, endUserSpeaking, endAssistantSpeaking, updateAudioStatus]);
+  }, [detach, resetSilencePrompt, endUserSpeaking, endAssistantSpeaking, updateAudioStatus, handleInterruption]);
 
   useEffect(() => {
     if (!wsUrl) {
@@ -444,7 +462,7 @@ export const LiveTestPage: React.FC = () => {
       endAssistantSpeaking(true);
       updateAudioStatus(false, false);
     }
-  }, [detach, resetSilencePrompt, wsUrl, endUserSpeaking, endAssistantSpeaking, updateAudioStatus]);
+  }, [detach, resetSilencePrompt, wsUrl, endUserSpeaking, endAssistantSpeaking, updateAudioStatus, handleInterruption]);
 
   const summaryMode = logView === "summary";
 

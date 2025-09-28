@@ -8,6 +8,7 @@ export interface LiveSessionCallbacks {
   onLog?: (message: string) => void;
   onCaption?: (caption: string) => void;
   onTranscript?: (snapshot: TranscriptSnapshot) => void;
+  onModelText?: (text: string, isComplete: boolean, turnId?: number) => void;
 }
 
 interface LiveAudioSessionOptions {
@@ -148,6 +149,13 @@ interface SegmentDiagnosticsEventPayload {
   readonly zeroAudioSegments: number;
 }
 
+interface ModelTextEventPayload {
+  readonly event: "MODEL_TEXT";
+  readonly text: string;
+  readonly turnId?: number;
+  readonly isComplete: boolean;
+}
+
 type BinaryReceptionOrigin = "ws" | "blob" | "segment_fallback";
 type BinaryReceptionSummaryReason = "interval" | "chunk" | "turn" | "reset" | "fallback";
 
@@ -198,6 +206,9 @@ const isSegmentDiagnosticsEvent = (value: unknown): value is SegmentDiagnosticsE
     typeof value.zeroAudioSegments === "number"
   );
 };
+
+const isModelTextEvent = (value: unknown): value is ModelTextEventPayload =>
+  isPlainObject(value) && value.event === "MODEL_TEXT";
 
 /**
  * TURN_COMMIT形式のイベントであるか簡易検査する。
@@ -837,6 +848,11 @@ export class LiveAudioSession {
         return;
       }
 
+      if (isModelTextEvent(parsed)) {
+        this.handleModelTextEvent(parsed);
+        return;
+      }
+
       if (this.detectGenerationComplete(parsed)) {
         this.handleGenerationComplete();
       }
@@ -1021,6 +1037,18 @@ export class LiveAudioSession {
       parts.push(`preview=${preview}`);
     }
     this.log(`[diag:segment] ${parts.join(" ")}`);
+  }
+
+  /**
+   * モデルの発話テキストイベントを処理
+   */
+  private handleModelTextEvent(event: ModelTextEventPayload): void {
+    this.log(
+      `[model.text] text="${event.text}" complete=${event.isComplete} turnId=${event.turnId ?? 'unknown'}`
+    );
+    
+    // コールバックでモデルのテキストを通知
+    this.callbacks.onModelText?.(event.text, event.isComplete, event.turnId);
   }
 
   private async pushToPlayer(buffer: ArrayBuffer): Promise<void> {

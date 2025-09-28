@@ -105,6 +105,22 @@ export const useConversation = () => {
   }, [updateState]);
 
   /**
+   * ユーザー文字起こしの有効/無効を設定
+   */
+  const setUserTranscriptionEnabled = useCallback((enabled: boolean) => {
+    storeRef.current.setUserTranscriptionEnabled(enabled);
+    updateState();
+  }, [updateState]);
+
+  /**
+   * 割り込み時の発言確定処理
+   */
+  const handleInterruption = useCallback(() => {
+    storeRef.current.handleInterruption();
+    updateState();
+  }, [updateState]);
+
+  /**
    * タイムアウトによる自動確定処理
    */
   useEffect(() => {
@@ -146,6 +162,8 @@ export const useConversation = () => {
     commitAssistantTurn,
     clearHistory,
     setTranscriptionDisabled,
+    setUserTranscriptionEnabled,
+    handleInterruption,
     updateAudioStatus,
   };
 };

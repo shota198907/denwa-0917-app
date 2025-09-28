@@ -945,6 +945,9 @@ export class GeminiLiveProxy {
     }
     const serverCompleteActive = this.serverCompleteForced || this.serverCompleteSeen;
 
+    // モデルの発話テキストを抽出してクライアントに送信
+    this.extractAndSendModelText(sanitized);
+
     if (sessionSnapshot) {
       this.sessionSnapshot = sessionSnapshot;
       const snapshotRecord = sessionSnapshot as Record<string, unknown>;
@@ -1488,6 +1491,82 @@ export class GeminiLiveProxy {
     if (record.server_complete !== undefined) debugInfo.server_complete = record.server_complete;
 
     console.info("[debug.raw_payload_analysis]", debugInfo);
+  }
+
+  /**
+   * モデルの発話テキストを抽出してクライアントに送信
+   * @param payload サニタイズ済みペイロード
+   */
+  private extractAndSendModelText(payload: unknown): void {
+    if (!isPlainObject(payload)) return;
+
+    const record = payload as Record<string, unknown>;
+    
+    // serverContent内のcandidatesからテキストを抽出
+    if (isPlainObject(record.serverContent)) {
+      const serverContent = record.serverContent as Record<string, unknown>;
+      if (Array.isArray(serverContent.candidates)) {
+        for (const candidate of serverContent.candidates) {
+          if (isPlainObject(candidate)) {
+            const cand = candidate as Record<string, unknown>;
+            const text = this.extractTextFromCandidate(cand);
+            if (text) {
+              // モデルの発話テキストをクライアントに送信
+              this.safeSendToClientJSON({
+                event: "MODEL_TEXT",
+                text: text,
+                turnId: this.getCurrentTurnId(),
+                isComplete: cand.finishReason === "STOP",
+              });
+              
+              console.info("[model.text]", {
+                sessionId: this.sessionId,
+                textLength: text.length,
+                isComplete: cand.finishReason === "STOP",
+                finishReason: cand.finishReason,
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * candidateからテキストを抽出
+   */
+  private extractTextFromCandidate(candidate: Record<string, unknown>): string | null {
+    if (!isPlainObject(candidate.content)) return null;
+    
+    const content = candidate.content as Record<string, unknown>;
+    
+    // parts配列からテキストを抽出
+    if (Array.isArray(content.parts)) {
+      const textParts: string[] = [];
+      for (const part of content.parts) {
+        if (typeof part === "string") {
+          textParts.push(part);
+        } else if (isPlainObject(part) && typeof part.text === "string") {
+          textParts.push(part.text);
+        }
+      }
+      return textParts.join("");
+    }
+    
+    // 直接テキストフィールド
+    if (typeof content.text === "string") {
+      return content.text;
+    }
+    
+    return null;
+  }
+
+  /**
+   * 現在のターンIDを取得（簡易実装）
+   */
+  private getCurrentTurnId(): number {
+    // 実際の実装では適切なターンIDを管理する必要がある
+    return Math.floor(Date.now() / 1000);
   }
 
   /**
