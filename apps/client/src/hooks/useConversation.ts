@@ -73,6 +73,14 @@ export const useConversation = () => {
   }, [updateState]);
 
   /**
+   * 鐘（ターン終了）によるアシスタント発言の確定
+   */
+  const commitAssistantTurn = useCallback(() => {
+    storeRef.current.commitAssistantTurn();
+    updateState();
+  }, [updateState]);
+
+  /**
    * 会話履歴をクリア
    */
   const clearHistory = useCallback(() => {
@@ -135,6 +143,7 @@ export const useConversation = () => {
     startAssistantSpeaking,
     updateAssistantText,
     endAssistantSpeaking,
+    commitAssistantTurn,
     clearHistory,
     setTranscriptionDisabled,
     updateAudioStatus,

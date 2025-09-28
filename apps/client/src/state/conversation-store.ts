@@ -105,6 +105,7 @@ export class ConversationStore {
 
   /**
    * アシスタントの発言更新
+   * 鐘（ターン終了）が来るまでテキストを蓄積する
    */
   public updateAssistantText(text: string): void {
     if (!this.isAssistantSpeaking) {
@@ -113,11 +114,22 @@ export class ConversationStore {
 
     const trimmed = text.trim();
     
-    // アシスタントの場合は切れ端でも確定（音声が鳴っているため）
+    // アシスタントの場合は切れ端でも蓄積（鐘で確定されるため）
     if (trimmed.length > 0) {
+      // 既存のテキストに追加（鐘で確定されるまで）
       this.currentAssistantText = trimmed;
       this.lastActivity = new Date();
     }
+  }
+
+  /**
+   * 鐘（ターン終了）によるアシスタント発言の確定
+   * これまでのテキストをすべて確定する
+   */
+  public commitAssistantTurn(): void {
+    if (!this.isAssistantSpeaking || this.currentAssistantText.length === 0) return;
+
+    this.commitAssistantMessage();
   }
 
   /**

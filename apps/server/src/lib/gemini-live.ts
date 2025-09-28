@@ -175,48 +175,68 @@ const extractAudioChunks = (payload: unknown): ExtractedPayload => {
   return { sanitized, audioChunks, goAwayDetected, sessionSnapshot };
 };
 
-/**
- * serverCompleteフラグの有無を再帰的に検出する。
- * @param payload Live APIからのサニタイズ済みペイロード
- */
-const detectServerCompleteFlag = (payload: unknown): boolean => {
-  return detectServerCompleteRecursive(payload, 0, new Set());
-};
+  /**
+   * 鐘（ターン終了）の検出
+   * Gemini Live APIでは、candidates配列のfinishReasonが"STOP"の場合がターン終了を示す
+   * @param payload Live APIからのサニタイズ済みペイロード
+   */
+  const detectTurnEnd = (payload: unknown): boolean => {
+    return detectTurnEndRecursive(payload, 0, new Set());
+  };
 
-/**
- * serverComplete検出の再帰ロジック。
- */
-const detectServerCompleteRecursive = (
-  value: unknown,
-  depth: number,
-  seen: Set<unknown>
-): boolean => {
-  if (depth > 8) return false;
-  if (!value || typeof value !== "object") return false;
-  if (seen.has(value)) return false;
-  seen.add(value);
+  /**
+   * ターン終了検出の再帰ロジック
+   */
+  const detectTurnEndRecursive = (
+    value: unknown,
+    depth: number,
+    seen: Set<unknown>
+  ): boolean => {
+    if (depth > 8) return false;
+    if (!value || typeof value !== "object") return false;
+    if (seen.has(value)) return false;
+    seen.add(value);
 
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      if (detectServerCompleteRecursive(entry, depth + 1, seen)) {
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (detectTurnEndRecursive(entry, depth + 1, seen)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    const record = value as Record<string, unknown>;
+    
+    // serverCompleteフラグの検出（従来の方法）
+    if (record.serverComplete === true || record.server_complete === true) {
+      return true;
+    }
+
+    // serverContent内のcandidates配列をチェック
+    if (isPlainObject(record.serverContent)) {
+      const serverContent = record.serverContent as Record<string, unknown>;
+      if (Array.isArray(serverContent.candidates)) {
+        for (const candidate of serverContent.candidates) {
+          if (isPlainObject(candidate)) {
+            const cand = candidate as Record<string, unknown>;
+            // finishReasonが"STOP"の場合はターン終了
+            if (cand.finishReason === "STOP") {
+              return true;
+            }
+          }
+        }
+      }
+    }
+
+    // その他の子要素を再帰的にチェック
+    for (const child of Object.values(record)) {
+      if (detectTurnEndRecursive(child, depth + 1, seen)) {
         return true;
       }
     }
     return false;
-  }
-
-  const record = value as Record<string, unknown>;
-  if (record.serverComplete === true || record.server_complete === true) {
-    return true;
-  }
-
-  for (const child of Object.values(record)) {
-    if (detectServerCompleteRecursive(child, depth + 1, seen)) {
-      return true;
-    }
-  }
-  return false;
-};
+  };
 
 interface AudioExtractionResult {
   readonly chunk: AudioChunk;
@@ -919,8 +939,8 @@ export class GeminiLiveProxy {
     this.logRawPayload(parsed);
 
     const { sanitized, audioChunks, goAwayDetected, sessionSnapshot } = extractAudioChunks(parsed);
-    const serverCompleteDetected = detectServerCompleteFlag(sanitized);
-    if (serverCompleteDetected) {
+    const turnEndDetected = detectTurnEnd(sanitized);
+    if (turnEndDetected) {
       this.serverCompleteSeen = true;
     }
     const serverCompleteActive = this.serverCompleteForced || this.serverCompleteSeen;

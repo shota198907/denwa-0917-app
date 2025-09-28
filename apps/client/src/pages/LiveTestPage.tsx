@@ -106,6 +106,7 @@ export const LiveTestPage: React.FC = () => {
     startAssistantSpeaking,
     updateAssistantText,
     endAssistantSpeaking,
+    commitAssistantTurn,
     clearHistory,
     setTranscriptionDisabled,
     updateAudioStatus,
@@ -268,9 +269,9 @@ export const LiveTestPage: React.FC = () => {
               startAssistantSpeaking(latestTurn.turnId);
               updateAssistantText(latest);
               
-              // ターンが確定した場合は発言を終了
+              // ターンが確定した場合（鐘が来た場合）は発言を確定
               if (latestTurn.finalized) {
-                endAssistantSpeaking(true);
+                commitAssistantTurn();
               }
             }
           }
@@ -287,7 +288,7 @@ export const LiveTestPage: React.FC = () => {
           if (trimmed === AUDIO_ONLY_LABEL) {
             startAssistantSpeaking();
             updateAssistantText("（音声のみ）");
-            endAssistantSpeaking(true);
+            commitAssistantTurn();
             return;
           }
           
@@ -298,22 +299,14 @@ export const LiveTestPage: React.FC = () => {
             return;
           }
           
-          // 句読点で終わる場合は確定
-          const isTerminal = TERMINAL_PUNCTUATION.test(trimmed);
-          if (isTerminal) {
-            startAssistantSpeaking();
-            updateAssistantText(trimmed);
-            endAssistantSpeaking(true);
-          } else {
-            // 途中のテキストはリアルタイム更新
-            startAssistantSpeaking();
-            updateAssistantText(trimmed);
-          }
+          // アシスタントの発言として蓄積（鐘で確定されるまで）
+          startAssistantSpeaking();
+          updateAssistantText(trimmed);
         },
       });
     }
     return sessionRef.current;
-  }, [pushLog, wsUrl, startAssistantSpeaking, updateAssistantText, endAssistantSpeaking]);
+  }, [pushLog, wsUrl, startAssistantSpeaking, updateAssistantText, commitAssistantTurn]);
 
   const { isSpeech, energy, attach, detach } = useVAD({
     onSpeechStart: () => {
