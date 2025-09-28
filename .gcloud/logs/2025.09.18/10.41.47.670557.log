@@ -1,0 +1,75 @@
+2025-09-18 10:41:47,671 DEBUG    root            Loaded Command Group: ['gcloud', 'run']
+2025-09-18 10:41:47,759 DEBUG    root            Loaded Command Group: ['gcloud', 'run', 'services']
+2025-09-18 10:41:47,789 DEBUG    root            Loaded Command Group: ['gcloud', 'run', 'services', 'describe']
+2025-09-18 10:41:47,791 DEBUG    root            Running [gcloud.run.services.describe] with arguments: [--format: "json", --project: "denwa-0917", --region: "asia-northeast1", SERVICE: "voice-dialog-service"]
+2025-09-18 10:41:47,793 DEBUG    root            (gcloud.run.services.describe) You do not currently have an active account selected.
+Please run:
+
+  $ gcloud auth login
+
+to obtain new credentials.
+
+If you have already logged in with a different account, run:
+
+  $ gcloud config set account ACCOUNT
+
+to select an already authenticated account to use.
+Traceback (most recent call last):
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/cli.py", line 944, in Execute
+    resources = calliope_command.Run(cli=self, args=args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/backend.py", line 955, in Run
+    resources = command_instance.Run(args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/surface/run/services/describe.py", line 105, in Run
+    with serverless_operations.Connect(conn_context) as client:
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/contextlib.py", line 137, in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/command_lib/run/serverless_operations.py", line 117, in Connect
+    op_client = apis.GetClientInstance(
+                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/util/apis.py", line 278, in GetClientInstance
+    return apis_internal._GetClientInstance(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/util/apis_internal.py", line 169, in _GetClientInstance
+    http_client = transports.GetApitoolsTransport(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/transports.py", line 80, in GetApitoolsTransport
+    session = requests.GetSession(
+              ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/requests.py", line 85, in GetSession
+    credentials = store.LoadIfEnabled(
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/store.py", line 636, in LoadIfEnabled
+    return Load(
+           ^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/store.py", line 876, in Load
+    cred = _Load(
+           ^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/store.py", line 1058, in _Load
+    raise creds_exceptions.NoActiveAccountException(
+googlecloudsdk.core.credentials.exceptions.NoActiveAccountException: You do not currently have an active account selected.
+Please run:
+
+  $ gcloud auth login
+
+to obtain new credentials.
+
+If you have already logged in with a different account, run:
+
+  $ gcloud config set account ACCOUNT
+
+to select an already authenticated account to use.
+2025-09-18 10:41:47,796 ERROR    root            (gcloud.run.services.describe) You do not currently have an active account selected.
+Please run:
+
+  $ gcloud auth login
+
+to obtain new credentials.
+
+If you have already logged in with a different account, run:
+
+  $ gcloud config set account ACCOUNT
+
+to select an already authenticated account to use.

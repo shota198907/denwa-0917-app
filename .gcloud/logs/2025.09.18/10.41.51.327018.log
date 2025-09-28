@@ -1,0 +1,98 @@
+2025-09-18 10:41:51,327 DEBUG    root            Loaded Command Group: ['gcloud', 'auth']
+2025-09-18 10:41:51,336 DEBUG    root            Loaded Command Group: ['gcloud', 'auth', 'login']
+2025-09-18 10:41:51,338 DEBUG    root            Running [gcloud.auth.login] with arguments: []
+2025-09-18 10:41:51,372 WARNING  root            Failed to start a local webserver listening on any port between 8085 and 8184. Please check your firewall settings or locally running programs that may be blocking or using those ports.
+2025-09-18 10:41:51,372 WARNING  root            Defaulting to --no-browser mode.
+2025-09-18 10:41:51,373 DEBUG    requests_oauthlib.oauth2_session Generated new state 2t6nVkJKoqKoTAeqrOQsFzmnROW2Vh.
+2025-09-18 10:41:51,373 INFO     ___FILE_ONLY___ You are authorizing gcloud CLI without access to a web browser. Please run the following command on a machine with a web browser and copy its output back here. Make sure the installed gcloud version is 372.0.0 or newer.
+
+gcloud auth login --remote-bootstrap="https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=32555940559.apps.googleusercontent.com&scope=openid+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fappengine.admin+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fsqlservice.login+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcompute+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Faccounts.reauth&state=2t6nVkJKoqKoTAeqrOQsFzmnROW2Vh&access_type=offline&code_challenge=PKQjOz4_SOUbQodjfw1kAh_koXOWPcYuzHET8PJUBYo&code_challenge_method=S256&token_usage=remote"
+
+2025-09-18 10:41:51,374 INFO     ___FILE_ONLY___ 
+
+
+2025-09-18 10:41:51,374 DEBUG    root            EOF when reading a line
+Traceback (most recent call last):
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/cli.py", line 944, in Execute
+    resources = calliope_command.Run(cli=self, args=args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/backend.py", line 955, in Run
+    resources = command_instance.Run(args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/surface/auth/login.py", line 334, in Run
+    creds = auth_util.DoInstalledAppBrowserFlowGoogleAuth(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/auth/util.py", line 371, in DoInstalledAppBrowserFlowGoogleAuth
+    user_creds = BrowserFlowWithNoBrowserFallbackRunner(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/auth/util.py", line 146, in Run
+    return self._flow.Run(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/flow.py", line 262, in Run
+    return self._Run(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/flow.py", line 644, in _Run
+    auth_response = self._PromptForAuthResponse(url_manager.GetUrl())
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/flow.py", line 631, in _PromptForAuthResponse
+    return PromptForAuthResponse(
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/flow.py", line 544, in PromptForAuthResponse
+    return input(prompt_msg).strip()
+           ^^^^^^^^^^^^^^^^^
+EOFError: EOF when reading a line
+2025-09-18 10:41:51,376 ERROR    ___FILE_ONLY___ BEGIN CRASH STACKTRACE
+Traceback (most recent call last):
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/command_lib/crash_handling.py", line 199, in Wrapper
+    target_function(*args, **kwargs)
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/gcloud_main.py", line 190, in main
+    gcloud_cli.Execute()
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/cli.py", line 973, in Execute
+    self._HandleAllErrors(exc, command_path_string, specified_arg_names)
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/cli.py", line 1017, in _HandleAllErrors
+    exceptions.HandleError(exc, command_path_string, self.__known_error_handler)
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/exceptions.py", line 594, in HandleError
+    core_exceptions.reraise(exc)
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/exceptions.py", line 149, in reraise
+    six.reraise(type(exc_value), exc_value, tb)
+  File "/Users/sn/google-cloud-sdk/lib/third_party/six/__init__.py", line 719, in reraise
+    raise value
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/cli.py", line 944, in Execute
+    resources = calliope_command.Run(cli=self, args=args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/backend.py", line 955, in Run
+    resources = command_instance.Run(args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/surface/auth/login.py", line 334, in Run
+    creds = auth_util.DoInstalledAppBrowserFlowGoogleAuth(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/auth/util.py", line 371, in DoInstalledAppBrowserFlowGoogleAuth
+    user_creds = BrowserFlowWithNoBrowserFallbackRunner(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/auth/util.py", line 146, in Run
+    return self._flow.Run(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/flow.py", line 262, in Run
+    return self._Run(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/flow.py", line 644, in _Run
+    auth_response = self._PromptForAuthResponse(url_manager.GetUrl())
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/flow.py", line 631, in _PromptForAuthResponse
+    return PromptForAuthResponse(
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/flow.py", line 544, in PromptForAuthResponse
+    return input(prompt_msg).strip()
+           ^^^^^^^^^^^^^^^^^
+EOFError: EOF when reading a line
+2025-09-18 10:41:51,379 ERROR    root            gcloud crashed (EOFError): EOF when reading a line
+2025-09-18 10:41:51,379 INFO     ___FILE_ONLY___ 
+If you would like to report this issue, please run the following command:
+
+2025-09-18 10:41:51,379 INFO     ___FILE_ONLY___   gcloud feedback
+
+2025-09-18 10:41:51,379 INFO     ___FILE_ONLY___ 
+To check gcloud for common problems, please run the following command:
+
+2025-09-18 10:41:51,379 INFO     ___FILE_ONLY___   gcloud info --run-diagnostics
+

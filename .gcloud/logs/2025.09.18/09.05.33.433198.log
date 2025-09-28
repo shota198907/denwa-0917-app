@@ -1,0 +1,78 @@
+2025-09-18 09:05:33,433 DEBUG    root            Loaded Command Group: ['gcloud', 'run']
+2025-09-18 09:05:33,557 DEBUG    root            Loaded Command Group: ['gcloud', 'run', 'deploy']
+2025-09-18 09:05:33,564 DEBUG    root            Running [gcloud.run.deploy] with arguments: [--image: "gcr.io/denwa-0917/voice-dialog-server:latest", --project: "denwa-0917", --region: "asia-northeast1", SERVICE: "voice-dialog-service"]
+2025-09-18 09:05:33,569 DEBUG    root            (gcloud.run.deploy) You do not currently have an active account selected.
+Please run:
+
+  $ gcloud auth login
+
+to obtain new credentials.
+
+If you have already logged in with a different account, run:
+
+  $ gcloud config set account ACCOUNT
+
+to select an already authenticated account to use.
+Traceback (most recent call last):
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/cli.py", line 944, in Execute
+    resources = calliope_command.Run(cli=self, args=args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/backend.py", line 955, in Run
+    resources = command_instance.Run(args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/surface/run/deploy.py", line 805, in Run
+    already_activated_services = api_enabler.check_and_enable_apis(
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/run/api_enabler.py", line 51, in check_and_enable_apis
+    apis_not_enabled = get_disabled_apis(project_id, required_apis)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/run/api_enabler.py", line 81, in get_disabled_apis
+    if not enable_api.IsServiceEnabled(project_id, api)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/services/enable_api.py", line 43, in IsServiceEnabled
+    service = serviceusage.GetService(project_id, service_name)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/services/serviceusage.py", line 1000, in GetService
+    client = _GetClientInstance()
+             ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/services/serviceusage.py", line 1450, in _GetClientInstance
+    http_client = transports.GetApitoolsTransport(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/transports.py", line 80, in GetApitoolsTransport
+    session = requests.GetSession(
+              ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/requests.py", line 85, in GetSession
+    credentials = store.LoadIfEnabled(
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/store.py", line 636, in LoadIfEnabled
+    return Load(
+           ^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/store.py", line 876, in Load
+    cred = _Load(
+           ^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/store.py", line 1058, in _Load
+    raise creds_exceptions.NoActiveAccountException(
+googlecloudsdk.core.credentials.exceptions.NoActiveAccountException: You do not currently have an active account selected.
+Please run:
+
+  $ gcloud auth login
+
+to obtain new credentials.
+
+If you have already logged in with a different account, run:
+
+  $ gcloud config set account ACCOUNT
+
+to select an already authenticated account to use.
+2025-09-18 09:05:33,572 ERROR    root            (gcloud.run.deploy) You do not currently have an active account selected.
+Please run:
+
+  $ gcloud auth login
+
+to obtain new credentials.
+
+If you have already logged in with a different account, run:
+
+  $ gcloud config set account ACCOUNT
+
+to select an already authenticated account to use.

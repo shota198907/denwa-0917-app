@@ -1,0 +1,8 @@
+2025-09-18 10:41:39,635 DEBUG    root            Loaded Command Group: ['gcloud', 'beta', 'logging']
+2025-09-18 10:41:39,643 DEBUG    root            Loaded Command Group: ['gcloud', 'beta', 'logging', 'tail']
+2025-09-18 10:41:39,644 DEBUG    root            Loaded Command Group: ['gcloud', 'logging']
+2025-09-18 10:41:39,645 DEBUG    root            No implementation for release track [GA] for element: [/Users/sn/google-cloud-sdk/lib/surface/logging/tail]
+2025-09-18 10:41:39,645 ERROR    root            (gcloud.beta.logging.tail) unrecognized arguments: --limit=5 
+
+To search the help text of gcloud commands, run:
+  gcloud help -- SEARCH_TERMS

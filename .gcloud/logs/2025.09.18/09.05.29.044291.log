@@ -1,0 +1,54 @@
+2025-09-18 09:05:29,045 DEBUG    root            Loaded Command Group: ['gcloud', 'run']
+2025-09-18 09:05:29,178 DEBUG    root            Loaded Command Group: ['gcloud', 'run', 'deploy']
+2025-09-18 09:05:29,188 DEBUG    root            Running [gcloud.run.deploy] with arguments: [--image: "gcr.io/denwa-0917/voice-dialog-server:latest", --region: "asia-northeast1", SERVICE: "voice-dialog-service"]
+2025-09-18 09:05:29,189 DEBUG    root            (gcloud.run.deploy) The [project] resource is not properly specified. Please specify the argument [--project] on the command line or set the property [core/project].
+Traceback (most recent call last):
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/cli.py", line 944, in Execute
+    resources = calliope_command.Run(cli=self, args=args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/backend.py", line 955, in Run
+    resources = command_instance.Run(args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/surface/run/deploy.py", line 798, in Run
+    service_ref = args.CONCEPTS.service.Parse()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/concepts/handlers.py", line 90, in Parse
+    return self.parse(self.arg_getter())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/command_lib/util/concepts/info_holders.py", line 397, in Parse
+    result = self.concept_spec.Parse(self.attribute_to_args_map,
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/concepts/concepts.py", line 464, in Parse
+    return self._ParseFromValue(
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/concepts/concepts.py", line 545, in _ParseFromValue
+    return self.Initialize(
+           ^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/concepts/concepts.py", line 424, in Initialize
+    return self._resources.Parse(
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/resources.py", line 1217, in Parse
+    return self.ParseResourceId(collection, line, params or {},
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/resources.py", line 973, in ParseResourceId
+    return parser.ParseResourceId(resource_id, kwargs, base_url, subcollection,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/resources.py", line 314, in ParseResourceId
+    param_values[param] = resolver() if callable(resolver) else resolver
+                          ^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/concepts/concepts.py", line 417, in <lambda>
+    return lambda: deps_lib.Get(name, fallthroughs_map, parsed_args)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/concepts/deps.py", line 356, in Get
+    return GetFromFallthroughs(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/concepts/deps.py", line 381, in GetFromFallthroughs
+    return fallthrough.GetValue(parsed_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/concepts/deps.py", line 90, in GetValue
+    value = self._Call(parsed_args)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/command_lib/run/resource_args.py", line 204, in _Call
+    raise exceptions.ArgumentError(
+googlecloudsdk.command_lib.run.exceptions.ArgumentError: The [project] resource is not properly specified. Please specify the argument [--project] on the command line or set the property [core/project].
+2025-09-18 09:05:29,194 ERROR    root            (gcloud.run.deploy) The [project] resource is not properly specified. Please specify the argument [--project] on the command line or set the property [core/project].

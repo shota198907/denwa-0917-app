@@ -3,13 +3,30 @@ export interface MetricsSnapshot {
   readonly totalSessions: number;
   readonly reconnects: number;
   readonly rateLimitedReconnects: number;
+  readonly emptyTurnCommits: number;
+  readonly forcedCloseDrops: number;
+  readonly lengthMismatches: number;
+  readonly pendingAtClose: number;
 }
 
-const state: { activeSessions: number; totalSessions: number; reconnects: number; rateLimitedReconnects: number } = {
+const state: {
+  activeSessions: number;
+  totalSessions: number;
+  reconnects: number;
+  rateLimitedReconnects: number;
+  emptyTurnCommits: number;
+  forcedCloseDrops: number;
+  lengthMismatches: number;
+  pendingAtClose: number;
+} = {
   activeSessions: 0,
   totalSessions: 0,
   reconnects: 0,
   rateLimitedReconnects: 0,
+  emptyTurnCommits: 0,
+  forcedCloseDrops: 0,
+  lengthMismatches: 0,
+  pendingAtClose: 0,
 };
 
 export const metrics = {
@@ -28,5 +45,17 @@ export const metrics = {
   },
   rateLimitedReconnect(): void {
     state.rateLimitedReconnects += 1;
+  },
+  emptyTurnCommitted(): void {
+    state.emptyTurnCommits += 1;
+  },
+  forcedCloseDropped(): void {
+    state.forcedCloseDrops += 1;
+  },
+  lengthMismatchDetected(): void {
+    state.lengthMismatches += 1;
+  },
+  pendingAtCloseObserved(): void {
+    state.pendingAtClose += 1;
   },
 };

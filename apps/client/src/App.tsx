@@ -1,22 +1,25 @@
-import React, { useState } from "react";
+import React, { useMemo } from "react";
+import LiveTestPage from "./pages/LiveTestPage";
 
-export default function App() {
-  const [status, setStatus] = useState("(未実行)");
+const detectPathname = (): string => {
+  if (typeof window === "undefined") return "/";
+  return window.location.pathname || "/";
+};
 
-  async function ping() {
-    const url = `${import.meta.env.VITE_BACKEND_URL}/health`;
-    const res = await fetch(url, { mode: "cors" });
-    const json = await res.json();
-    setStatus(JSON.stringify(json));
+export default function App(): React.ReactElement {
+  const pathname = useMemo(detectPathname, []);
+  if (pathname === "/live-test") {
+    return <LiveTestPage />;
   }
-
   return (
-    <div style={{ padding: 24, fontFamily: "sans-serif" }}>
-      <h1>Health Check</h1>
-      <button onClick={ping} style={{ padding: "8px 12px" }}>
-        /health を呼ぶ
-      </button>
-      <pre style={{ marginTop: 12 }}>{status}</pre>
+    <div style={{ padding: 32, fontFamily: "sans-serif", lineHeight: 1.6, maxWidth: 800 }}>
+      <h1>Voice Dialog Client</h1>
+      <p>
+        開発サーバ起動後、<code>http://localhost:5173/live-test</code> を開いてください。
+      </p>
+      <p>
+        必要な環境変数: <code>VITE_BACKEND_URL</code>（<code>apps/client/.env.local</code> に設定）。
+      </p>
     </div>
   );
 }

@@ -1,0 +1,39 @@
+2025-09-18 10:41:42,420 DEBUG    root            Loaded Command Group: ['gcloud', 'beta', 'logging']
+2025-09-18 10:41:42,427 DEBUG    root            Loaded Command Group: ['gcloud', 'beta', 'logging', 'tail']
+2025-09-18 10:41:42,429 DEBUG    root            Running [gcloud.beta.logging.tail] with arguments: [--format: "value(textPayload)", --project: "denwa-0917", LOG_FILTER: "resource.type="cloud_run_revision" AND resource.labels.service_name="voice-dialog-service""]
+2025-09-18 10:41:42,506 DEBUG    root            (gcloud.beta.logging.tail) Please ensure that the gRPC module is installed and the environment is correctly configured. Run:
+  sudo pip3 install grpcio
+and set:
+  export CLOUDSDK_PYTHON_SITEPACKAGES=1
+For more information, see https://cloud.google.com/logging/docs/reference/tools/gcloud-logging#install_live_tailing
+Traceback (most recent call last):
+  File "/Users/sn/google-cloud-sdk/lib/surface/logging/tail.py", line 119, in _Run
+    from googlecloudsdk.api_lib.logging import tailing
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/logging/tailing.py", line 40, in <module>
+    import grpc
+ModuleNotFoundError: No module named 'grpc'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/cli.py", line 944, in Execute
+    resources = calliope_command.Run(cli=self, args=args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/backend.py", line 955, in Run
+    resources = command_instance.Run(args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/surface/logging/tail.py", line 157, in Run
+    return self._Run(args)
+           ^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/surface/logging/tail.py", line 122, in _Run
+    raise NoGRPCInstalledError()
+__calliope__command__.14e140bc339a4bd8abeb2a15052ec341.gcloud.beta.logging.tail.NoGRPCInstalledError: Please ensure that the gRPC module is installed and the environment is correctly configured. Run:
+  sudo pip3 install grpcio
+and set:
+  export CLOUDSDK_PYTHON_SITEPACKAGES=1
+For more information, see https://cloud.google.com/logging/docs/reference/tools/gcloud-logging#install_live_tailing
+2025-09-18 10:41:42,508 ERROR    root            (gcloud.beta.logging.tail) Please ensure that the gRPC module is installed and the environment is correctly configured. Run:
+  sudo pip3 install grpcio
+and set:
+  export CLOUDSDK_PYTHON_SITEPACKAGES=1
+For more information, see https://cloud.google.com/logging/docs/reference/tools/gcloud-logging#install_live_tailing

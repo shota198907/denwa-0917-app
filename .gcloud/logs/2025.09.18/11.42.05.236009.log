@@ -1,0 +1,72 @@
+2025-09-18 11:42:05,236 DEBUG    root            Loaded Command Group: ['gcloud', 'run']
+2025-09-18 11:42:05,361 DEBUG    root            Loaded Command Group: ['gcloud', 'run', 'deploy']
+2025-09-18 11:42:05,368 DEBUG    root            Running [gcloud.run.deploy] with arguments: [--project: "denwa-0917", --region: "asia-northeast1", --source: "apps/server", SERVICE: "voice-dialog-service"]
+2025-09-18 11:42:05,371 DEBUG    root            (gcloud.run.deploy) Your current active account [sigeo3kyojinn@gmail.com] does not have any valid credentials
+Please run:
+
+  $ gcloud auth login
+
+to obtain new credentials.
+
+For service account, please activate it first:
+
+  $ gcloud auth activate-service-account ACCOUNT
+Traceback (most recent call last):
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/cli.py", line 944, in Execute
+    resources = calliope_command.Run(cli=self, args=args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/calliope/backend.py", line 955, in Run
+    resources = command_instance.Run(args)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/surface/run/deploy.py", line 805, in Run
+    already_activated_services = api_enabler.check_and_enable_apis(
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/run/api_enabler.py", line 51, in check_and_enable_apis
+    apis_not_enabled = get_disabled_apis(project_id, required_apis)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/run/api_enabler.py", line 81, in get_disabled_apis
+    if not enable_api.IsServiceEnabled(project_id, api)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/services/enable_api.py", line 43, in IsServiceEnabled
+    service = serviceusage.GetService(project_id, service_name)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/services/serviceusage.py", line 1000, in GetService
+    client = _GetClientInstance()
+             ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/api_lib/services/serviceusage.py", line 1450, in _GetClientInstance
+    http_client = transports.GetApitoolsTransport(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/transports.py", line 80, in GetApitoolsTransport
+    session = requests.GetSession(
+              ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/requests.py", line 85, in GetSession
+    credentials = store.LoadIfEnabled(
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/store.py", line 636, in LoadIfEnabled
+    return Load(
+           ^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/store.py", line 876, in Load
+    cred = _Load(
+           ^^^^^^
+  File "/Users/sn/google-cloud-sdk/lib/googlecloudsdk/core/credentials/store.py", line 1073, in _Load
+    raise NoCredentialsForAccountException(account)
+googlecloudsdk.core.credentials.store.NoCredentialsForAccountException: Your current active account [sigeo3kyojinn@gmail.com] does not have any valid credentials
+Please run:
+
+  $ gcloud auth login
+
+to obtain new credentials.
+
+For service account, please activate it first:
+
+  $ gcloud auth activate-service-account ACCOUNT
+2025-09-18 11:42:05,372 ERROR    root            (gcloud.run.deploy) Your current active account [sigeo3kyojinn@gmail.com] does not have any valid credentials
+Please run:
+
+  $ gcloud auth login
+
+to obtain new credentials.
+
+For service account, please activate it first:
+
+  $ gcloud auth activate-service-account ACCOUNT
