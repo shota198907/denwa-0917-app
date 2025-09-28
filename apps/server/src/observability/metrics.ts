@@ -7,6 +7,12 @@ export interface MetricsSnapshot {
   readonly forcedCloseDrops: number;
   readonly lengthMismatches: number;
   readonly pendingAtClose: number;
+  readonly audioExtractionAttempts: number;
+  readonly audioExtractionSuccesses: number;
+  readonly audioExtractionFailures: number;
+  readonly segmentFallbackCount: number;
+  readonly zeroAudioSegments: number;
+  readonly realtimeOutputDetections: number;
 }
 
 const state: {
@@ -18,6 +24,12 @@ const state: {
   forcedCloseDrops: number;
   lengthMismatches: number;
   pendingAtClose: number;
+  audioExtractionAttempts: number;
+  audioExtractionSuccesses: number;
+  audioExtractionFailures: number;
+  segmentFallbackCount: number;
+  zeroAudioSegments: number;
+  realtimeOutputDetections: number;
 } = {
   activeSessions: 0,
   totalSessions: 0,
@@ -27,6 +39,12 @@ const state: {
   forcedCloseDrops: 0,
   lengthMismatches: 0,
   pendingAtClose: 0,
+  audioExtractionAttempts: 0,
+  audioExtractionSuccesses: 0,
+  audioExtractionFailures: 0,
+  segmentFallbackCount: 0,
+  zeroAudioSegments: 0,
+  realtimeOutputDetections: 0,
 };
 
 export const metrics = {
@@ -57,5 +75,23 @@ export const metrics = {
   },
   pendingAtCloseObserved(): void {
     state.pendingAtClose += 1;
+  },
+  audioExtractionAttempted(): void {
+    state.audioExtractionAttempts += 1;
+  },
+  audioExtractionSucceeded(): void {
+    state.audioExtractionSuccesses += 1;
+  },
+  audioExtractionFailed(): void {
+    state.audioExtractionFailures += 1;
+  },
+  segmentFallbackDetected(): void {
+    state.segmentFallbackCount += 1;
+  },
+  zeroAudioSegmentDetected(): void {
+    state.zeroAudioSegments += 1;
+  },
+  realtimeOutputDetected(): void {
+    state.realtimeOutputDetections += 1;
   },
 };

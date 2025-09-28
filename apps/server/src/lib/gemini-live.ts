@@ -238,12 +238,14 @@ const pickChunkData = (value: Record<string, unknown>): string | undefined => {
 const maybeExtractAudio = (value: unknown): AudioExtractionResult | undefined => {
   if (!isPlainObject(value)) return undefined;
 
+  metrics.audioExtractionAttempted();
   const directMime = pickMimeType(value);
   const directData = pickChunkData(value);
 
   if (directMime && directData && directMime.includes("audio")) {
     const buffer = Buffer.from(directData, "base64");
     const sanitized = { ...value, data: undefined, inline_data: undefined, sizeBytes: buffer.length };
+    metrics.audioExtractionSucceeded();
     return { chunk: { buffer, mimeType: directMime }, sanitized };
   }
 
@@ -254,6 +256,7 @@ const maybeExtractAudio = (value: unknown): AudioExtractionResult | undefined =>
       const buffer = Buffer.from(data, "base64");
       const sanitizedInline = { ...value.inlineData, data: undefined, inline_data: undefined, sizeBytes: buffer.length };
       const sanitized = { ...value, inlineData: sanitizedInline };
+      metrics.audioExtractionSucceeded();
       return { chunk: { buffer, mimeType: mime }, sanitized };
     }
   }
@@ -265,6 +268,7 @@ const maybeExtractAudio = (value: unknown): AudioExtractionResult | undefined =>
       const buffer = Buffer.from(data, "base64");
       const sanitizedInline = { ...value.inline_data, data: undefined, inline_data: undefined, sizeBytes: buffer.length };
       const sanitized = { ...value, inline_data: sanitizedInline };
+      metrics.audioExtractionSucceeded();
       return { chunk: { buffer, mimeType: mime }, sanitized };
     }
   }
@@ -276,6 +280,7 @@ const maybeExtractAudio = (value: unknown): AudioExtractionResult | undefined =>
       const buffer = Buffer.from(data, "base64");
       const sanitizedAudio = { ...value.audio, data: undefined, inline_data: undefined, sizeBytes: buffer.length };
       const sanitized = { ...value, audio: sanitizedAudio };
+      metrics.audioExtractionSucceeded();
       return { chunk: { buffer, mimeType: mime }, sanitized };
     }
   }
@@ -287,6 +292,8 @@ const maybeExtractAudio = (value: unknown): AudioExtractionResult | undefined =>
       const buffer = Buffer.from(data, "base64");
       const sanitizedRealtime = { ...value.realtimeOutput, data: undefined, inline_data: undefined, sizeBytes: buffer.length };
       const sanitized = { ...value, realtimeOutput: sanitizedRealtime };
+      metrics.realtimeOutputDetected();
+      metrics.audioExtractionSucceeded();
       return { chunk: { buffer, mimeType: mime }, sanitized };
     }
   }
@@ -298,10 +305,13 @@ const maybeExtractAudio = (value: unknown): AudioExtractionResult | undefined =>
       const buffer = Buffer.from(data, "base64");
       const sanitizedRealtime = { ...value.realtime_output, data: undefined, inline_data: undefined, sizeBytes: buffer.length };
       const sanitized = { ...value, realtime_output: sanitizedRealtime };
+      metrics.realtimeOutputDetected();
+      metrics.audioExtractionSucceeded();
       return { chunk: { buffer, mimeType: mime }, sanitized };
     }
   }
 
+  metrics.audioExtractionFailed();
   return undefined;
 };
 
@@ -905,6 +915,9 @@ export class GeminiLiveProxy {
       return;
     }
 
+    // 🔍 生データのデバッグログ追加（PII考慮済み）
+    this.logRawPayload(parsed);
+
     const { sanitized, audioChunks, goAwayDetected, sessionSnapshot } = extractAudioChunks(parsed);
     const serverCompleteDetected = detectServerCompleteFlag(sanitized);
     if (serverCompleteDetected) {
@@ -950,6 +963,18 @@ export class GeminiLiveProxy {
     const zeroAudioSegments = segmentEvents.filter(
       (event): event is SegmentCommitMessage => event.event === "SEGMENT_COMMIT" && event.audioBytes === 0
     ).length;
+    
+    // segment_fallbackの検出とメトリクス記録
+    if (zeroAudioSegments > 0) {
+      metrics.zeroAudioSegmentDetected();
+      console.warn("[debug.segment_fallback_detected]", {
+        sessionId: this.sessionId,
+        turnId: diagnostics.turnId,
+        zeroAudioSegments,
+        audioChunkCount: audioSummary.count,
+        audioChunkBytes: audioSummary.totalBytes,
+      });
+    }
     this.maybeEmitDiagnostics(segmentEvents, diagnostics, audioSummary, zeroAudioSegments);
     const hasNewSegments = segmentEvents.some((event) => event.event === "SEGMENT_COMMIT");
     const { segmentCommitSummaries, turnCommitSummary } = this.dispatchSegmentEvents(segmentEvents, "stream");
@@ -1380,6 +1405,104 @@ export class GeminiLiveProxy {
     } catch (error) {
       trace({ event: "client.serialize_failed", data: { sessionId: this.sessionId, message: stringifyError(error) } });
     }
+  }
+
+  /**
+   * 生ペイロードの構造化ログを出力（PII考慮済み）
+   * @param payload Gemini Live APIから受信した生データ
+   */
+  private logRawPayload(payload: unknown): void {
+    if (!isPlainObject(payload)) return;
+
+    const record = payload as Record<string, unknown>;
+    
+    // serverContentとcandidates配列の詳細をログ化
+    const debugInfo: Record<string, unknown> = {
+      sessionId: this.sessionId,
+      timestamp: Date.now(),
+    };
+
+    // serverContentの分析
+    if (record.serverContent) {
+      debugInfo.hasServerContent = true;
+      debugInfo.serverContentType = typeof record.serverContent;
+      
+      if (isPlainObject(record.serverContent)) {
+        const serverContent = record.serverContent as Record<string, unknown>;
+        debugInfo.serverContentKeys = Object.keys(serverContent);
+        
+        // candidates配列の詳細
+        if (Array.isArray(serverContent.candidates)) {
+          debugInfo.candidatesCount = serverContent.candidates.length;
+          debugInfo.candidatesPreview = serverContent.candidates.slice(0, 3).map((candidate: unknown) => {
+            if (isPlainObject(candidate)) {
+              const cand = candidate as Record<string, unknown>;
+              return {
+                hasContent: !!cand.content,
+                contentType: typeof cand.content,
+                contentKeys: isPlainObject(cand.content) ? Object.keys(cand.content) : undefined,
+                finishReason: cand.finishReason,
+                // PIIを避けるため、テキスト内容は長さのみ記録
+                textLength: this.extractTextLength(cand.content),
+              };
+            }
+            return { type: typeof candidate };
+          });
+        }
+      }
+    }
+
+    // generationConfigの確認
+    if (record.generationConfig) {
+      debugInfo.hasGenerationConfig = true;
+      if (isPlainObject(record.generationConfig)) {
+        const config = record.generationConfig as Record<string, unknown>;
+        debugInfo.responseModalities = config.responseModalities;
+        debugInfo.speechConfig = !!config.speechConfig;
+      }
+    }
+
+    // その他の重要なフィールド
+    if (record.event) debugInfo.event = record.event;
+    if (record.serverComplete !== undefined) debugInfo.serverComplete = record.serverComplete;
+    if (record.server_complete !== undefined) debugInfo.server_complete = record.server_complete;
+
+    console.info("[debug.raw_payload_analysis]", debugInfo);
+  }
+
+  /**
+   * テキストの長さを安全に抽出（PII回避）
+   * @param content コンテンツオブジェクト
+   * @returns テキストの長さ情報
+   */
+  private extractTextLength(content: unknown): { totalLength: number; partsLength?: number[] } | null {
+    if (typeof content === "string") {
+      return { totalLength: content.length };
+    }
+    
+    if (isPlainObject(content)) {
+      const record = content as Record<string, unknown>;
+      
+      // parts配列の処理
+      if (Array.isArray(record.parts)) {
+        const partsLength = record.parts.map((part: unknown) => {
+          if (typeof part === "string") return part.length;
+          if (isPlainObject(part) && typeof part.text === "string") {
+            return part.text.length;
+          }
+          return 0;
+        });
+        const totalLength = partsLength.reduce((sum, len) => sum + len, 0);
+        return { totalLength, partsLength };
+      }
+      
+      // 直接テキストフィールドの処理
+      if (typeof record.text === "string") {
+        return { totalLength: record.text.length };
+      }
+    }
+    
+    return null;
   }
 
   private shutdown(): void {

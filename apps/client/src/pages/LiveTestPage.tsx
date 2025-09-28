@@ -2,12 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { LiveAudioSession } from "../lib/ws-audio";
 import { useVAD } from "../hooks/useVAD";
 import { useSilencePrompt } from "../hooks/useSilencePrompt";
+import { useConversation } from "../hooks/useConversation";
 import { AUDIO_ONLY_LABEL } from "../lib/caption-helpers";
 import {
   SessionLogSummarizer,
   type SummaryLogEntryPayload,
   type SummaryLogImportance,
 } from "../lib/log-summary";
+import DualCaptions from "../components/DualCaptions";
 
 const LOCAL_FLAG_KEY = "__denwaFeatureFlags";
 
@@ -67,7 +69,6 @@ interface SummaryLogEntry extends SummaryLogEntryPayload {
 
 const MAX_LOG_ENTRIES = 50;
 const MAX_SUMMARY_LOG_ENTRIES = 60;
-const MAX_CAPTION_HISTORY = 20;
 const SILENCE_PROMPT_TEXT = "少々お待ちしています。何かお手伝いできることはありますか？";
 const TERMINAL_PUNCTUATION = /[。．.？！?!…]$/;
 const CAPTION_PENDING_LABEL = "（応答生成中…）";
@@ -92,12 +93,23 @@ export const LiveTestPage: React.FC = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [summaryLogs, setSummaryLogs] = useState<SummaryLogEntry[]>([]);
   const [logView, setLogView] = useState<"summary" | "raw">("summary");
-  const [caption, setCaption] = useState<string>("");
-  const [captionHistory, setCaptionHistory] = useState<string[]>([]);
   const [pendingText, setPendingText] = useState<string>("");
   const [flagDraft, setFlagDraft] = useState<FeatureFlagDraft>(FLAG_DEFAULTS);
   const [flagsLoaded, setFlagsLoaded] = useState(false);
-  const lastCommittedCaptionRef = useRef<string>("");
+
+  // 新しい会話状態管理
+  const {
+    conversationState,
+    startUserSpeaking,
+    updateUserText,
+    endUserSpeaking,
+    startAssistantSpeaking,
+    updateAssistantText,
+    endAssistantSpeaking,
+    clearHistory,
+    setTranscriptionDisabled,
+    updateAudioStatus,
+  } = useConversation();
 
   const summaryColorMap: Record<SummaryLogImportance, string> = useMemo(
     () => ({ info: "#0c5a4d", warn: "#7a4a00", error: "#7a0022" }),
@@ -245,57 +257,79 @@ export const LiveTestPage: React.FC = () => {
         onError: (details) => pushLog(`[error] ${details}`),
         onLog: (message) => pushLog(message),
         onTranscript: (snapshot) => {
+          // アシスタントの発言として処理
           const sentences = snapshot.turns.flatMap((turn) => turn.sentences.map((sentence) => sentence.text));
           if (sentences.length > 0) {
             const latest = sentences[sentences.length - 1];
-            lastCommittedCaptionRef.current = latest;
-            setCaption(latest);
-          } else {
-            lastCommittedCaptionRef.current = "";
-            setCaption("");
+            
+            // 新しいターンが開始された場合
+            const latestTurn = snapshot.turns[snapshot.turns.length - 1];
+            if (latestTurn && latestTurn.turnId) {
+              startAssistantSpeaking(latestTurn.turnId);
+              updateAssistantText(latest);
+              
+              // ターンが確定した場合は発言を終了
+              if (latestTurn.finalized) {
+                endAssistantSpeaking(true);
+              }
+            }
           }
-          const history = sentences.slice(-MAX_CAPTION_HISTORY).reverse();
-          setCaptionHistory(history);
         },
         onCaption: (text) => {
           const trimmed = text.trim();
-          if (trimmed === "?") {
+          
+          // 無効なテキストは無視
+          if (trimmed === "?" || !trimmed) {
             return;
           }
-          if (!trimmed) {
-            setCaption("");
-            lastCommittedCaptionRef.current = "";
-            return;
-          }
+          
+          // 音声のみの場合は特別処理
           if (trimmed === AUDIO_ONLY_LABEL) {
-            lastCommittedCaptionRef.current = trimmed;
-            setCaption(trimmed);
+            startAssistantSpeaking();
+            updateAssistantText("（音声のみ）");
+            endAssistantSpeaking(true);
             return;
           }
+          
+          // 応答生成中の場合は一時的な表示
+          if (trimmed === CAPTION_PENDING_LABEL) {
+            startAssistantSpeaking();
+            updateAssistantText("（応答生成中…）");
+            return;
+          }
+          
+          // 句読点で終わる場合は確定
           const isTerminal = TERMINAL_PUNCTUATION.test(trimmed);
-          if (!isTerminal) {
-            setCaption(CAPTION_PENDING_LABEL);
-            return;
+          if (isTerminal) {
+            startAssistantSpeaking();
+            updateAssistantText(trimmed);
+            endAssistantSpeaking(true);
+          } else {
+            // 途中のテキストはリアルタイム更新
+            startAssistantSpeaking();
+            updateAssistantText(trimmed);
           }
-          if (lastCommittedCaptionRef.current === trimmed) {
-            setCaption(trimmed);
-            return;
-          }
-          lastCommittedCaptionRef.current = trimmed;
-          setCaption(trimmed);
         },
       });
     }
     return sessionRef.current;
-  }, [pushLog, wsUrl]);
+  }, [pushLog, wsUrl, startAssistantSpeaking, updateAssistantText, endAssistantSpeaking]);
 
   const { isSpeech, energy, attach, detach } = useVAD({
     onSpeechStart: () => {
       pushLog("[vad] speech detected (client)");
       sessionRef.current?.interruptPlayback("barge-in");
+      
+      // ユーザーの発言開始
+      startUserSpeaking();
+      updateAudioStatus(true, false);
     },
     onSpeechEnd: () => {
       pushLog("[vad] speech ended");
+      
+      // ユーザーの発言終了
+      endUserSpeaking(true);
+      updateAudioStatus(false, false);
     },
   });
 
@@ -336,10 +370,12 @@ export const LiveTestPage: React.FC = () => {
     setIsConnected(false);
     setIsConnecting(false);
     setIsMicActive(false);
-    lastCommittedCaptionRef.current = "";
-    setCaption("");
-    setCaptionHistory([]);
-  }, [detach, resetSilencePrompt]);
+    
+    // 会話状態をリセット
+    endUserSpeaking(true);
+    endAssistantSpeaking(true);
+    updateAudioStatus(false, false);
+  }, [detach, resetSilencePrompt, endUserSpeaking, endAssistantSpeaking, updateAudioStatus]);
 
   const sendText = useCallback(() => {
     const text = pendingText.trim();
@@ -349,9 +385,16 @@ export const LiveTestPage: React.FC = () => {
       pushLog("[warn] cannot send text: not connected");
       return;
     }
+    
+    // テキスト送信をユーザーの発言として記録
+    startUserSpeaking();
+    updateUserText(text);
+    endUserSpeaking(true);
+    updateAudioStatus(false, true); // アシスタントが応答開始
+    
     session.sendText(text);
     setPendingText("");
-  }, [ensureSession, pendingText, pushLog]);
+  }, [ensureSession, pendingText, pushLog, startUserSpeaking, updateUserText, endUserSpeaking, updateAudioStatus]);
 
   const startMic = useCallback(async () => {
     const session = ensureSession();
@@ -362,11 +405,14 @@ export const LiveTestPage: React.FC = () => {
       attach({ stream, audioContext: context });
       resetSilencePrompt();
       setIsMicActive(true);
+      
+      // 文字起こし機能が無効な場合の表示
+      setTranscriptionDisabled();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       pushLog(`[error] mic start failed: ${message}`);
     }
-  }, [attach, ensureSession, pushLog, resetSilencePrompt]);
+  }, [attach, ensureSession, pushLog, resetSilencePrompt, setTranscriptionDisabled]);
 
   const stopMic = useCallback(() => {
     const session = sessionRef.current;
@@ -383,11 +429,13 @@ export const LiveTestPage: React.FC = () => {
       sessionRef.current = null;
       detach();
       resetSilencePrompt();
-    lastCommittedCaptionRef.current = "";
-      setCaption("");
-      setCaptionHistory([]);
+      
+      // 会話状態をリセット
+      endUserSpeaking(true);
+      endAssistantSpeaking(true);
+      updateAudioStatus(false, false);
     };
-  }, [detach, resetSilencePrompt]);
+  }, [detach, resetSilencePrompt, endUserSpeaking, endAssistantSpeaking, updateAudioStatus]);
 
   useEffect(() => {
     if (!wsUrl) {
@@ -397,11 +445,13 @@ export const LiveTestPage: React.FC = () => {
       resetSilencePrompt();
       setIsConnected(false);
       setIsConnecting(false);
-    lastCommittedCaptionRef.current = "";
-      setCaption("");
-      setCaptionHistory([]);
+      
+      // 会話状態をリセット
+      endUserSpeaking(true);
+      endAssistantSpeaking(true);
+      updateAudioStatus(false, false);
     }
-  }, [detach, resetSilencePrompt, wsUrl]);
+  }, [detach, resetSilencePrompt, wsUrl, endUserSpeaking, endAssistantSpeaking, updateAudioStatus]);
 
   const summaryMode = logView === "summary";
 
@@ -616,50 +666,23 @@ export const LiveTestPage: React.FC = () => {
       </section>
 
       <section style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: "1.2rem", marginBottom: 4 }}>Captions</h2>
-        <div
-          style={{
-            border: "1px solid #ccc",
-            borderRadius: 4,
-            padding: 12,
-            background: "#fafafa",
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-          }}
-        >
-          <div
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <h2 style={{ fontSize: "1.2rem", margin: 0 }}>💬 会話字幕</h2>
+          <button 
+            onClick={clearHistory}
             style={{
-              minHeight: 60,
-              fontSize: "1.1rem",
-              fontWeight: 600,
-              color: caption ? "#222" : "#888",
+              fontSize: '0.8rem',
+              padding: '4px 8px',
+              background: '#f0f0f0',
+              border: '1px solid #ccc',
+              borderRadius: '4px',
+              cursor: 'pointer',
             }}
           >
-            {caption || "会話字幕がここに表示されます。"}
-          </div>
-          {captionHistory.length > 0 && (
-            <div>
-              <div style={{ fontSize: "0.85rem", color: "#666", marginBottom: 4 }}>Recent</div>
-              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
-                {captionHistory.map((entry, index) => (
-                  <li
-                    key={`${entry}-${index}`}
-                    style={{
-                      padding: "6px 8px",
-                      borderRadius: 4,
-                      background: index === 0 ? "#fff" : "#f3f3f3",
-                      border: "1px solid #e2e2e2",
-                      fontSize: "0.95rem",
-                    }}
-                  >
-                    {entry}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+            履歴クリア
+          </button>
         </div>
+        <DualCaptions conversationState={conversationState} />
       </section>
 
       <section>

@@ -208,6 +208,9 @@ export class LiveSegmenter {
       return;
     }
 
+    // 🔍 transcript処理の詳細ログ追加
+    this.logTranscriptProcessing(transcript, payload);
+
     const previousPartial = this.currentPartial;
     this.currentTranscript = transcript;
     const { complete, partial } = parseSentences(transcript);
@@ -253,12 +256,39 @@ export class LiveSegmenter {
     }
 
     const hasNewCharacters = partial.length > this.partialCommittedLength;
-    if (!force) {
+    const timeSinceLastUpdate = Date.now() - this.partialLastUpdatedAt;
+    
+    // 🔍 部分文処理の詳細ログ
+    console.info("[debug.partial_processing]", {
+      turnId: this.turnId,
+      partialLength: partial.length,
+      partialPreview: partial.length <= 50 ? partial : `${partial.slice(0, 50)}...`,
+      partialCommittedLength: this.partialCommittedLength,
+      hasNewCharacters,
+      timeSinceLastUpdate,
+      force,
+      timestamp: Date.now(),
+    });
+
+    // タイムアウトによる強制送信の条件を追加
+    const shouldForceByTimeout = timeSinceLastUpdate > PARTIAL_COMMIT_DELAY_MS && partial.length >= MIN_PARTIAL_TEXT_LENGTH;
+    
+    if (!force && !shouldForceByTimeout) {
       return;
     }
 
-    if (!hasNewCharacters) {
+    if (!hasNewCharacters && !shouldForceByTimeout) {
       return;
+    }
+
+    // 強制送信時の詳細ログ
+    if (shouldForceByTimeout) {
+      console.warn("[debug.partial_timeout_force_commit]", {
+        turnId: this.turnId,
+        partialLength: partial.length,
+        timeSinceLastUpdate,
+        reason: "timeout",
+      });
     }
 
     this.commitAudioSegment();
@@ -483,5 +513,80 @@ export class LiveSegmenter {
    */
   public getCurrentTranscriptLength(): number {
     return this.currentTranscript.length;
+  }
+
+  /**
+   * transcript処理の詳細ログを出力
+   * @param transcript 抽出されたtranscript
+   * @param originalPayload 元のペイロード
+   */
+  private logTranscriptProcessing(transcript: string, originalPayload: unknown): void {
+    const debugInfo = {
+      turnId: this.turnId,
+      timestamp: Date.now(),
+      transcriptLength: transcript.length,
+      transcriptPreview: transcript.length <= 100 ? transcript : `${transcript.slice(0, 100)}...`,
+      previousTranscriptLength: this.currentTranscript.length,
+      previousPartialLength: this.currentPartial.length,
+      // ペイロードの構造分析
+      payloadAnalysis: this.analyzePayloadStructure(originalPayload),
+    };
+
+    // 短いtranscriptや異常な状況を特にログ化
+    if (transcript.length <= 5 || transcript.trim().length === 0) {
+      console.warn("[debug.transcript_short]", debugInfo);
+    } else if (transcript.length > this.currentTranscript.length + 50) {
+      console.info("[debug.transcript_significant_growth]", debugInfo);
+    } else {
+      console.info("[debug.transcript_processing]", debugInfo);
+    }
+  }
+
+  /**
+   * ペイロードの構造を分析
+   * @param payload 分析対象のペイロード
+   */
+  private analyzePayloadStructure(payload: unknown): Record<string, unknown> {
+    if (typeof payload !== "object" || payload === null) {
+      return { type: typeof payload };
+    }
+
+    const record = payload as Record<string, unknown>;
+    const analysis: Record<string, unknown> = {
+      type: "object",
+      keys: Object.keys(record),
+    };
+
+    // serverContentの詳細分析
+    if (record.serverContent) {
+      analysis.hasServerContent = true;
+      if (typeof record.serverContent === "object" && record.serverContent !== null) {
+        const serverContent = record.serverContent as Record<string, unknown>;
+        analysis.serverContentKeys = Object.keys(serverContent);
+        
+        if (Array.isArray(serverContent.candidates)) {
+          analysis.candidatesCount = serverContent.candidates.length;
+          analysis.candidatesAnalysis = serverContent.candidates.slice(0, 2).map((candidate: unknown) => {
+            if (typeof candidate === "object" && candidate !== null) {
+              const cand = candidate as Record<string, unknown>;
+              return {
+                hasContent: !!cand.content,
+                finishReason: cand.finishReason,
+                contentType: typeof cand.content,
+                // PII回避のため内容は記録しない
+              };
+            }
+            return { type: typeof candidate };
+          });
+        }
+      }
+    }
+
+    // その他の重要なフィールド
+    if (record.event) analysis.event = record.event;
+    if (record.serverComplete !== undefined) analysis.serverComplete = record.serverComplete;
+    if (record.server_complete !== undefined) analysis.server_complete = record.server_complete;
+
+    return analysis;
   }
 }
