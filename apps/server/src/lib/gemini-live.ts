@@ -41,6 +41,9 @@ const BINARY_SUMMARY_INTERVAL_MS = 1200;
 const BINARY_SUMMARY_MAX_CHUNKS = 24;
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
+const SEGMENT_DEBUG = env.debug.segment;
+const BINARY_SUMMARY_DEBUG = env.debug.binarySummary;
+
 type BinaryChunkOrigin = "upstream_raw" | "payload_extract";
 type BinarySummaryReason = "chunk" | "interval" | "turn" | "shutdown" | "generation";
 
@@ -177,7 +180,7 @@ const extractAudioChunks = (payload: unknown): ExtractedPayload => {
 
   /**
    * 鐘（ターン終了）の検出
-   * Gemini Live APIでは、candidates配列のfinishReasonが"STOP"の場合がターン終了を示す
+   * Gemini Live APIでは、generationComplete/turnCompleteの各種フラグが終端合図となる
    * @param payload Live APIからのサニタイズ済みペイロード
    */
   const detectTurnEnd = (payload: unknown): boolean => {
@@ -213,19 +216,14 @@ const extractAudioChunks = (payload: unknown): ExtractedPayload => {
       return true;
     }
 
-    // serverContent内のcandidates配列をチェック
+    if (record.generationComplete === true || record.turnComplete === true) {
+      return true;
+    }
+
     if (isPlainObject(record.serverContent)) {
       const serverContent = record.serverContent as Record<string, unknown>;
-      if (Array.isArray(serverContent.candidates)) {
-        for (const candidate of serverContent.candidates) {
-          if (isPlainObject(candidate)) {
-            const cand = candidate as Record<string, unknown>;
-            // finishReasonが"STOP"の場合はターン終了
-            if (cand.finishReason === "STOP") {
-              return true;
-            }
-          }
-        }
+      if (serverContent.generationComplete === true || serverContent.turnComplete === true) {
+        return true;
       }
     }
 
@@ -381,7 +379,9 @@ const buildSetupPayload = (sessionSnapshot?: Record<string, unknown>) => {
     setup.session = sessionSnapshot;
   }
 
-  console.info("[debug.setup_payload]", JSON.stringify(setup));
+  if (SEGMENT_DEBUG) {
+    console.info("[debug.setup_payload]", JSON.stringify(setup));
+  }
   return { setup };
 };
 
@@ -535,6 +535,8 @@ export class GeminiLiveProxy {
   private turnFinalizationExtended = false;
   private turnFinalizationStartMs: number | undefined;
   private turnFinalizationTranscriptLength = 0;
+  private turnFinalized = false;
+  private lastFinalizedTurnId: number | null = null;
   private closed = false;
   private reconnectRequested = false;
   private sessionSnapshot?: Record<string, unknown>;
@@ -542,6 +544,7 @@ export class GeminiLiveProxy {
   private serverCompleteAckSent = false;
   private serverCompleteSeen = false;
   private binaryOutSummary: BinaryChunkSummary = this.createBinarySummary();
+  private lastBinarySummaryTurnId: number | null = null;
   private lastDiagnosticsSignature: string | null = null;
 
   constructor(options: GeminiProxyOptions) {
@@ -774,14 +777,16 @@ export class GeminiLiveProxy {
     summary.originCounts[origin] += 1;
     summary.originBytes[origin] += bytes;
 
-    const shouldFlushByChunk = summary.totalChunks >= BINARY_SUMMARY_MAX_CHUNKS;
-    const shouldFlushByTime = summary.lastChunkAt - summary.lastLogAt >= BINARY_SUMMARY_INTERVAL_MS;
+    const shouldFlushByChunk =
+      BINARY_SUMMARY_DEBUG && summary.totalChunks >= BINARY_SUMMARY_MAX_CHUNKS;
+    const shouldFlushByTime =
+      BINARY_SUMMARY_DEBUG && summary.lastChunkAt - summary.lastLogAt >= BINARY_SUMMARY_INTERVAL_MS;
     if (shouldFlushByChunk || shouldFlushByTime) {
       this.flushBinaryOutSummary(shouldFlushByChunk ? "chunk" : "interval");
     }
   }
 
-  private flushBinaryOutSummary(reason: BinarySummaryReason): void {
+  private flushBinaryOutSummary(reason: BinarySummaryReason, turnId?: number | null): void {
     const summary = this.binaryOutSummary;
     if (summary.totalChunks === 0) {
       summary.lastLogAt = Date.now();
@@ -792,21 +797,45 @@ export class GeminiLiveProxy {
     const spanMs = summary.lastChunkAt > summary.firstChunkAt ? summary.lastChunkAt - summary.firstChunkAt : 0;
     const averageBytes = Math.round(summary.totalBytes / summary.totalChunks);
 
-    console.info("[binary.out.summary]", {
-      sessionId: this.sessionId,
-      reason,
-      chunks: summary.totalChunks,
-      totalBytes: summary.totalBytes,
-      avgBytes: averageBytes,
-      minBytes: summary.minBytes === Number.POSITIVE_INFINITY ? 0 : summary.minBytes,
-      maxBytes: summary.maxBytes,
-      spanMs,
-      originCounts: summary.originCounts,
-      originBytes: summary.originBytes,
-    });
+    if (!BINARY_SUMMARY_DEBUG) {
+      this.binaryOutSummary = this.createBinarySummary();
+      this.binaryOutSummary.lastLogAt = now;
+      if (reason === "shutdown") {
+        this.lastBinarySummaryTurnId = null;
+      }
+      return;
+    }
+
+    if (reason === "turn" && typeof turnId === "number") {
+      if (this.lastBinarySummaryTurnId === turnId) {
+        this.binaryOutSummary = this.createBinarySummary();
+        this.binaryOutSummary.lastLogAt = now;
+        return;
+      }
+      this.lastBinarySummaryTurnId = turnId;
+    }
+
+    {
+      console.info("[binary.out.summary]", {
+        sessionId: this.sessionId,
+        reason,
+        turnId: turnId ?? null,
+        chunks: summary.totalChunks,
+        totalBytes: summary.totalBytes,
+        avgBytes: averageBytes,
+        minBytes: summary.minBytes === Number.POSITIVE_INFINITY ? 0 : summary.minBytes,
+        maxBytes: summary.maxBytes,
+        spanMs,
+        originCounts: summary.originCounts,
+        originBytes: summary.originBytes,
+      });
+    }
 
     this.binaryOutSummary = this.createBinarySummary();
     this.binaryOutSummary.lastLogAt = now;
+    if (reason === "shutdown") {
+      this.lastBinarySummaryTurnId = null;
+    }
   }
 
   private summarizeAudioChunks(chunks: ReadonlyArray<AudioChunk>): AudioChunkSummary {
@@ -837,9 +866,9 @@ export class GeminiLiveProxy {
     audioSummary: AudioChunkSummary,
     zeroAudioSegments: number
   ): boolean {
+    if (!SEGMENT_DEBUG) return false;
     if (events.length === 0) return false;
     if (zeroAudioSegments > 0) return true;
-    if (diagnostics.bestCandidateLength > 0 && diagnostics.bestCandidateLength <= 4) return true;
     if (audioSummary.totalBytes === 0 && diagnostics.transcriptLength > 0) return true;
     return false;
   }
@@ -869,10 +898,6 @@ export class GeminiLiveProxy {
       pendingTextCount: diagnostics.pendingTextCount,
       pendingTextLength: diagnostics.pendingTextLength,
       pendingAudioBytes: diagnostics.pendingAudioBytes,
-      bestCandidateLength: diagnostics.bestCandidateLength,
-      bestCandidatePreview: diagnostics.bestCandidatePreview,
-      candidateCount: diagnostics.candidateCount,
-      candidateSummaries: diagnostics.candidateSummaries,
       audioChunkCount: audioSummary.count,
       audioChunkBytes: audioSummary.totalBytes,
       audioChunkMin: audioSummary.minBytes,
@@ -936,7 +961,9 @@ export class GeminiLiveProxy {
     }
 
     // 🔍 生データのデバッグログ追加（PII考慮済み）
-    this.logRawPayload(parsed);
+    if (SEGMENT_DEBUG) {
+      this.logRawPayload(parsed);
+    }
 
     const { sanitized, audioChunks, goAwayDetected, sessionSnapshot } = extractAudioChunks(parsed);
     const turnEndDetected = detectTurnEnd(sanitized);
@@ -982,6 +1009,9 @@ export class GeminiLiveProxy {
     const segmentResult = this.segmenter.handleUpstreamPayload(sanitized, audioChunks);
     const segmentEvents = segmentResult.events;
     const diagnostics = this.segmenter.getDiagnosticsSummary();
+    if (this.lastFinalizedTurnId !== diagnostics.turnId) {
+      this.turnFinalized = false;
+    }
     const audioSummary = this.summarizeAudioChunks(audioChunks);
     const zeroAudioSegments = segmentEvents.filter(
       (event): event is SegmentCommitMessage => event.event === "SEGMENT_COMMIT" && event.audioBytes === 0
@@ -1000,11 +1030,16 @@ export class GeminiLiveProxy {
     }
     this.maybeEmitDiagnostics(segmentEvents, diagnostics, audioSummary, zeroAudioSegments);
     const hasNewSegments = segmentEvents.some((event) => event.event === "SEGMENT_COMMIT");
+    if (hasNewSegments) {
+      this.turnFinalized = false;
+    }
     const { segmentCommitSummaries, turnCommitSummary } = this.dispatchSegmentEvents(segmentEvents, "stream");
 
     if (turnCommitSummary) {
       this.clearTurnFinalizationTimer();
-      this.flushBinaryOutSummary("turn");
+      this.flushBinaryOutSummary("turn", turnCommitSummary.turnId);
+      this.turnFinalized = true;
+      this.lastFinalizedTurnId = turnCommitSummary.turnId;
     }
 
     if (serverCompleteActive && (segmentCommitSummaries.length > 0 || turnCommitSummary)) {
@@ -1020,7 +1055,7 @@ export class GeminiLiveProxy {
           turnId: turnCommitSummary?.turnId ?? lastCommit?.turnId ?? null,
           segmentCommits: segmentCommitSummaries,
           turnCommitIssued: Boolean(turnCommitSummary),
-          source: serverCompleteDetected ? "payload" : this.serverCompleteForced ? "forced" : "cached",
+          source: turnEndDetected ? "payload" : this.serverCompleteForced ? "forced" : "cached",
           pendingTextCount: pendingSnapshot.pendingTextCount,
           pendingTextLength: pendingSnapshot.pendingTextLength,
           pendingAudioBytes: pendingSnapshot.pendingAudioBytes,
@@ -1028,9 +1063,19 @@ export class GeminiLiveProxy {
       });
     }
 
+    const signalReasons: Array<"generationComplete" | "turnComplete"> = [];
     if (segmentResult.generationComplete) {
-      this.flushBinaryOutSummary("generation");
-      this.scheduleTurnFinalization();
+      this.flushBinaryOutSummary("generation", diagnostics.turnId);
+      signalReasons.push("generationComplete");
+    }
+    if (turnEndDetected) {
+      signalReasons.push("turnComplete");
+    }
+
+    if (signalReasons.length > 0) {
+      for (const signal of signalReasons) {
+        this.finalizeTurnFromSignal(signal);
+      }
     } else {
       this.maybeExtendTurnFinalization(hasNewSegments);
     }
@@ -1156,7 +1201,9 @@ export class GeminiLiveProxy {
         if (reason !== "stream") {
           payload.reason = reason;
         }
-        console.info("[segmentation.segment_commit]", payload);
+        if (SEGMENT_DEBUG) {
+          console.info("[segmentation.segment_commit]", payload);
+        }
       } else if (event.event === "TURN_COMMIT") {
         const payload: Record<string, unknown> = {
           sessionId: this.sessionId,
@@ -1167,24 +1214,19 @@ export class GeminiLiveProxy {
         if (reason !== "stream") {
           payload.reason = reason;
         }
-        console.info("[segmentation.turn_commit]", payload);
+        if (SEGMENT_DEBUG) {
+          console.info("[segmentation.turn_commit]", payload);
+        }
       }
     }
 
     return { segmentCommitSummaries, turnCommitSummary };
   }
 
-  private scheduleTurnFinalization(): void {
-    this.clearTurnFinalizationTimer();
-    this.turnFinalizationStartMs = Date.now();
-    this.turnFinalizationExtended = false;
-    this.turnFinalizationTranscriptLength = this.segmenter.getCurrentTranscriptLength();
-    this.turnFinalizationTimer = setTimeout(() => {
-      this.triggerTurnFinalization();
-    }, 1800);
-  }
-
   private maybeExtendTurnFinalization(hasNewSegments: boolean): void {
+    if (this.turnFinalized) {
+      return;
+    }
     if (!this.turnFinalizationTimer || this.turnFinalizationExtended) {
       return;
     }
@@ -1203,11 +1245,26 @@ export class GeminiLiveProxy {
     }, remaining);
   }
 
+  private finalizeTurnFromSignal(signal: "generationComplete" | "turnComplete"): void {
+    if (this.turnFinalized) {
+      return;
+    }
+    this.clearTurnFinalizationTimer();
+    const result = this.segmenter.finalizeTurn({ force: true });
+    if (result.events.length === 0) {
+      return;
+    }
+    this.processTurnFinalizationResult(result, "signal", signal);
+  }
+
   private triggerTurnFinalization(): void {
     this.turnFinalizationTimer = undefined;
     this.turnFinalizationExtended = false;
     this.turnFinalizationStartMs = undefined;
     this.turnFinalizationTranscriptLength = 0;
+    if (this.turnFinalized) {
+      return;
+    }
     const result = this.segmenter.finalizeTurn({ force: true });
     if (result.events.length === 0) {
       return;
@@ -1227,7 +1284,8 @@ export class GeminiLiveProxy {
 
   private processTurnFinalizationResult(
     result: TurnFinalizationResult,
-    reason: "timer" | "forced_close"
+    reason: "timer" | "forced_close" | "signal",
+    signalType?: "generationComplete" | "turnComplete" | "segment"
   ): void {
     this.clearTurnFinalizationTimer();
     const { segmentCommitSummaries, turnCommitSummary } = this.dispatchSegmentEvents(result.events, reason);
@@ -1257,8 +1315,26 @@ export class GeminiLiveProxy {
         pendingTextLength: pendingSnapshot.pendingTextLength,
         pendingAudioBytes: pendingSnapshot.pendingAudioBytes,
         reason,
+        signal: signalType ?? null,
       },
     });
+
+    const turnCommitEvent = result.events.find(
+      (event): event is TurnCommitMessage => event.event === "TURN_COMMIT"
+    );
+    if (turnCommitEvent) {
+      const previewText =
+        turnCommitEvent.finalText.length <= 80
+          ? turnCommitEvent.finalText
+          : `${turnCommitEvent.finalText.slice(0, 80)}…`;
+      const safePreview = JSON.stringify(previewText);
+      const signalLabel = signalType ? ` signal=${signalType}` : "";
+      console.info(
+        `[bell] reason=${reason}${signalLabel}; commit_len=${turnCommitEvent.finalText.length}; text=${safePreview}`
+      );
+      this.turnFinalized = true;
+      this.lastFinalizedTurnId = turnCommitEvent.turnId;
+    }
   }
 
   private handleUpstreamClose(code: number, reason: string): void {
@@ -1389,13 +1465,15 @@ export class GeminiLiveProxy {
       } catch (error) {
         console.error("UTF-8エラー検出:", buffer.slice(0, 50).toString("hex"));
       }
-      const isString = typeof payload === "string";
-      const preview = isString ? payload.slice(0, 120) : "<binary>";
-      console.info("[debug.send_to_upstream]", {
-        type: typeof payload,
-        length: isString ? payload.length : undefined,
-        preview,
-      });
+      if (SEGMENT_DEBUG) {
+        const isString = typeof payload === "string";
+        const preview = isString ? payload.slice(0, 120) : "<binary>";
+        console.info("[debug.send_to_upstream]", {
+          type: typeof payload,
+          length: isString ? payload.length : undefined,
+          preview,
+        });
+      }
       this.upstream.send(payload);
     } catch (error) {
       trace({ event: "upstream.send_failed", data: { sessionId: this.sessionId, message: stringifyError(error) } });
@@ -1435,11 +1513,14 @@ export class GeminiLiveProxy {
    * @param payload Gemini Live APIから受信した生データ
    */
   private logRawPayload(payload: unknown): void {
+    if (!SEGMENT_DEBUG) {
+      return;
+    }
     if (!isPlainObject(payload)) return;
 
     const record = payload as Record<string, unknown>;
     
-    // serverContentとcandidates配列の詳細をログ化
+    // serverContentの構造をログ化
     const debugInfo: Record<string, unknown> = {
       sessionId: this.sessionId,
       timestamp: Date.now(),
@@ -1454,24 +1535,10 @@ export class GeminiLiveProxy {
         const serverContent = record.serverContent as Record<string, unknown>;
         debugInfo.serverContentKeys = Object.keys(serverContent);
         
-        // candidates配列の詳細
-        if (Array.isArray(serverContent.candidates)) {
-          debugInfo.candidatesCount = serverContent.candidates.length;
-          debugInfo.candidatesPreview = serverContent.candidates.slice(0, 3).map((candidate: unknown) => {
-            if (isPlainObject(candidate)) {
-              const cand = candidate as Record<string, unknown>;
-              return {
-                hasContent: !!cand.content,
-                contentType: typeof cand.content,
-                contentKeys: isPlainObject(cand.content) ? Object.keys(cand.content) : undefined,
-                finishReason: cand.finishReason,
-                // PIIを避けるため、テキスト内容は長さのみ記録
-                textLength: this.extractTextLength(cand.content),
-              };
-            }
-            return { type: typeof candidate };
-          });
-        }
+        debugInfo.serverContentFlags = {
+          generationComplete: serverContent.generationComplete === true,
+          turnComplete: serverContent.turnComplete === true,
+        };
       }
     }
 
@@ -1500,65 +1567,34 @@ export class GeminiLiveProxy {
   private extractAndSendModelText(payload: unknown): void {
     if (!isPlainObject(payload)) return;
 
-    const record = payload as Record<string, unknown>;
-    
-    // serverContent内のcandidatesからテキストを抽出
-    if (isPlainObject(record.serverContent)) {
-      const serverContent = record.serverContent as Record<string, unknown>;
-      if (Array.isArray(serverContent.candidates)) {
-        for (const candidate of serverContent.candidates) {
-          if (isPlainObject(candidate)) {
-            const cand = candidate as Record<string, unknown>;
-            const text = this.extractTextFromCandidate(cand);
-            if (text) {
-              // モデルの発話テキストをクライアントに送信
-              this.safeSendToClientJSON({
-                event: "MODEL_TEXT",
-                text: text,
-                turnId: this.getCurrentTurnId(),
-                isComplete: cand.finishReason === "STOP",
-              });
-              
-              console.info("[model.text]", {
-                sessionId: this.sessionId,
-                textLength: text.length,
-                isComplete: cand.finishReason === "STOP",
-                finishReason: cand.finishReason,
-              });
-            }
-          }
-        }
-      }
+    const text = extractTranscript(payload);
+    if (typeof text !== "string" || text.trim().length === 0) {
+      return;
     }
-  }
 
-  /**
-   * candidateからテキストを抽出
-   */
-  private extractTextFromCandidate(candidate: Record<string, unknown>): string | null {
-    if (!isPlainObject(candidate.content)) return null;
-    
-    const content = candidate.content as Record<string, unknown>;
-    
-    // parts配列からテキストを抽出
-    if (Array.isArray(content.parts)) {
-      const textParts: string[] = [];
-      for (const part of content.parts) {
-        if (typeof part === "string") {
-          textParts.push(part);
-        } else if (isPlainObject(part) && typeof part.text === "string") {
-          textParts.push(part.text);
-        }
-      }
-      return textParts.join("");
-    }
-    
-    // 直接テキストフィールド
-    if (typeof content.text === "string") {
-      return content.text;
-    }
-    
-    return null;
+    const record = payload as Record<string, unknown>;
+    const serverContent = isPlainObject(record.serverContent)
+      ? (record.serverContent as Record<string, unknown>)
+      : undefined;
+
+    const isComplete =
+      record.generationComplete === true ||
+      record.turnComplete === true ||
+      (serverContent?.generationComplete === true) ||
+      (serverContent?.turnComplete === true);
+
+    this.safeSendToClientJSON({
+      event: "MODEL_TEXT",
+      text,
+      turnId: this.getCurrentTurnId(),
+      isComplete,
+    });
+
+    console.info("[model.text]", {
+      sessionId: this.sessionId,
+      textLength: text.length,
+      isComplete,
+    });
   }
 
   /**
@@ -1567,41 +1603,6 @@ export class GeminiLiveProxy {
   private getCurrentTurnId(): number {
     // 実際の実装では適切なターンIDを管理する必要がある
     return Math.floor(Date.now() / 1000);
-  }
-
-  /**
-   * テキストの長さを安全に抽出（PII回避）
-   * @param content コンテンツオブジェクト
-   * @returns テキストの長さ情報
-   */
-  private extractTextLength(content: unknown): { totalLength: number; partsLength?: number[] } | null {
-    if (typeof content === "string") {
-      return { totalLength: content.length };
-    }
-    
-    if (isPlainObject(content)) {
-      const record = content as Record<string, unknown>;
-      
-      // parts配列の処理
-      if (Array.isArray(record.parts)) {
-        const partsLength = record.parts.map((part: unknown) => {
-          if (typeof part === "string") return part.length;
-          if (isPlainObject(part) && typeof part.text === "string") {
-            return part.text.length;
-          }
-          return 0;
-        });
-        const totalLength = partsLength.reduce((sum, len) => sum + len, 0);
-        return { totalLength, partsLength };
-      }
-      
-      // 直接テキストフィールドの処理
-      if (typeof record.text === "string") {
-        return { totalLength: record.text.length };
-      }
-    }
-    
-    return null;
   }
 
   private shutdown(): void {

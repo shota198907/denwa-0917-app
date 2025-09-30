@@ -50,6 +50,11 @@ export interface GeminiConfig {
   readonly contextWindowCompressionTriggerTokens: number;
 }
 
+export interface DebugConfig {
+  readonly segment: boolean;
+  readonly binarySummary: boolean;
+}
+
 export interface RuntimeConfig {
   readonly port: number;
   readonly allowedOrigin: string;
@@ -59,6 +64,7 @@ export interface RuntimeConfig {
   readonly heartbeatIntervalMs: number;
   readonly segmentation: SegmentationConfig;
   readonly serverCompleteForced: boolean;
+  readonly debug: DebugConfig;
 }
 
 export interface SegmentationConfig {
@@ -141,6 +147,10 @@ export const env: RuntimeConfig = {
     maxPendingSegments: numberFromEnv(process.env.SEGMENT_MAX_PENDING, 8),
   },
   serverCompleteForced: booleanFromEnv(process.env.SERVER_COMPLETE_FORCED, false),
+  debug: {
+    segment: booleanFromEnv(process.env.SEGMENT_DEBUG, false),
+    binarySummary: booleanFromEnv(process.env.BINARY_SUMMARY_DEBUG, false),
+  },
 };
 
 export const assertGeminiConfig = (): void => {

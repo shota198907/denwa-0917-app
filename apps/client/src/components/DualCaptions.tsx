@@ -94,57 +94,11 @@ const ConversationMessageDisplay: React.FC<{ message: ConversationMessage }> = (
 };
 
 /**
- * 現在の発言表示コンポーネント（リアルタイム）
- */
-const CurrentSpeechDisplay: React.FC<{
-  text: string;
-  speaker: 'user' | 'assistant';
-  isActive: boolean;
-}> = ({ text, speaker, isActive }) => {
-  if (!isActive || !text) return null;
-
-  const speakerInfo = speaker === 'user' ? '👤 あなた' : '🤖 相手';
-  const color = speaker === 'user' ? '#0066cc' : '#cc6600';
-
-  return (
-    <div style={{
-      padding: '8px 12px',
-      borderRadius: '8px',
-      fontSize: '0.9rem',
-      lineHeight: 1.4,
-      background: isActive ? 'rgba(0, 102, 204, 0.1)' : 'transparent',
-      border: isActive ? `2px solid ${color}` : '2px solid transparent',
-      color: color,
-      fontWeight: 500,
-      position: 'relative',
-    }}>
-      <div style={{
-        fontSize: '0.7rem',
-        color: '#888',
-        marginBottom: '4px',
-      }}>
-        {speakerInfo} {isActive && '（話し中）'}
-      </div>
-      <div style={{ 
-        color: color,
-        opacity: isActive ? 1 : 0.7,
-      }}>
-        {text}
-        {isActive && <span style={{ 
-          animation: 'blink 1s infinite',
-          marginLeft: '2px',
-        }}>|</span>}
-      </div>
-    </div>
-  );
-};
-
-/**
  * 2本立て字幕メインコンポーネント
  */
-export const DualCaptions: React.FC<DualCaptionsProps> = ({ 
-  conversationState, 
-  className 
+export const DualCaptions: React.FC<DualCaptionsProps> = ({
+  conversationState,
+  className
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -153,7 +107,7 @@ export const DualCaptions: React.FC<DualCaptionsProps> = ({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [conversationState.messages.length, conversationState.currentUserText, conversationState.currentAssistantText]);
+  }, [conversationState.messages.length]);
 
   return (
     <div className={className} style={{
@@ -200,23 +154,8 @@ export const DualCaptions: React.FC<DualCaptionsProps> = ({
           <ConversationMessageDisplay key={message.id} message={message} />
         ))}
 
-        {/* 現在の発言（リアルタイム） */}
-        <CurrentSpeechDisplay
-          text={conversationState.currentUserText}
-          speaker="user"
-          isActive={conversationState.isUserSpeaking}
-        />
-        
-        <CurrentSpeechDisplay
-          text={conversationState.currentAssistantText}
-          speaker="assistant"
-          isActive={conversationState.isAssistantSpeaking}
-        />
-
         {/* 空状態の表示 */}
-        {conversationState.messages.length === 0 && 
-         !conversationState.currentUserText && 
-         !conversationState.currentAssistantText && (
+        {conversationState.messages.length === 0 && (
           <div style={{
             textAlign: 'center',
             color: '#999',

@@ -1,11 +1,8 @@
 import crypto from "node:crypto";
-import {
-  extractTranscript,
-  inspectTranscriptPayload,
-  parseSentences,
-  isGenerationComplete,
-  TranscriptCandidateDiagnostics,
-} from "./transcription-utils";
+import { extractTranscript, parseSentences, isGenerationComplete } from "./transcription-utils";
+import { env } from "../env";
+
+const SEGMENT_DEBUG = env.debug.segment;
 
 export interface FlushSummary {
   readonly events: SegmentEvent[];
@@ -42,14 +39,6 @@ export interface SegmenterDiagnosticsSummary {
   readonly pendingTextCount: number;
   readonly pendingTextLength: number;
   readonly pendingAudioBytes: number;
-  readonly bestCandidateLength: number;
-  readonly bestCandidatePreview: string | null;
-  readonly candidateCount: number;
-  readonly candidateSummaries: ReadonlyArray<{
-    readonly length: number;
-    readonly score: number;
-    readonly preview: string;
-  }>;
 }
 
 export interface SegmentCommitMessage {
@@ -107,7 +96,6 @@ export class LiveSegmenter {
 
   private currentTranscript = "";
   private currentPartial = "";
-  private lastCandidateDiagnostics: TranscriptCandidateDiagnostics | null = null;
   private silenceRunSamples = 0;
   private committedCount = 0;
   private enqueuedCompleteCount = 0;
@@ -135,9 +123,6 @@ export class LiveSegmenter {
   ): SegmentProcessingResult {
     const events: SegmentEvent[] = [];
 
-    if (payload !== undefined) {
-      this.lastCandidateDiagnostics = inspectTranscriptPayload(payload);
-    }
     this.ingestTranscript(payload);
     this.enqueuePartialIfNeeded(false);
 
@@ -157,14 +142,6 @@ export class LiveSegmenter {
     const pendingTextLength = this.pendingTexts.reduce((sum, text) => sum + text.length, 0);
     const pendingAudioBytes = this.pendingAudio.reduce((sum, buffer) => sum + buffer.length, 0);
     const queuedAudioBytes = this.segmentedAudioQueue.reduce((sum, buffer) => sum + buffer.length, 0);
-    const candidateDiagnostics = this.lastCandidateDiagnostics;
-    const bestCandidate = candidateDiagnostics?.bestCandidate ?? null;
-    const candidateSummaries = (candidateDiagnostics?.candidates ?? []).slice(0, 6).map((entry) => ({
-      length: entry.length,
-      score: entry.score,
-      preview: entry.preview,
-    }));
-
     return {
       turnId: this.turnId,
       transcriptLength: this.currentTranscript.length,
@@ -172,15 +149,6 @@ export class LiveSegmenter {
       pendingTextCount,
       pendingTextLength,
       pendingAudioBytes: pendingAudioBytes + queuedAudioBytes,
-      bestCandidateLength: bestCandidate ? bestCandidate.length : 0,
-      bestCandidatePreview:
-        bestCandidate === null
-          ? null
-          : bestCandidate.length <= 120
-          ? bestCandidate
-          : `${bestCandidate.slice(0, 120)}…`,
-      candidateCount: candidateDiagnostics?.candidates.length ?? 0,
-      candidateSummaries,
     };
   }
 
@@ -193,7 +161,6 @@ export class LiveSegmenter {
     this.pendingTexts = [];
     this.currentTranscript = "";
     this.currentPartial = "";
-    this.lastCandidateDiagnostics = null;
     this.silenceRunSamples = 0;
     this.committedCount = 0;
     this.enqueuedCompleteCount = 0;
@@ -209,7 +176,9 @@ export class LiveSegmenter {
     }
 
     // 🔍 transcript処理の詳細ログ追加
-    this.logTranscriptProcessing(transcript, payload);
+    if (SEGMENT_DEBUG) {
+      this.logTranscriptProcessing(transcript, payload);
+    }
 
     const previousPartial = this.currentPartial;
     this.currentTranscript = transcript;
@@ -258,17 +227,19 @@ export class LiveSegmenter {
     const hasNewCharacters = partial.length > this.partialCommittedLength;
     const timeSinceLastUpdate = Date.now() - this.partialLastUpdatedAt;
     
-    // 🔍 部分文処理の詳細ログ
-    console.info("[debug.partial_processing]", {
-      turnId: this.turnId,
-      partialLength: partial.length,
-      partialPreview: partial.length <= 50 ? partial : `${partial.slice(0, 50)}...`,
-      partialCommittedLength: this.partialCommittedLength,
-      hasNewCharacters,
-      timeSinceLastUpdate,
-      force,
-      timestamp: Date.now(),
-    });
+    if (SEGMENT_DEBUG) {
+      // 🔍 部分文処理の詳細ログ
+      console.info("[debug.partial_processing]", {
+        turnId: this.turnId,
+        partialLength: partial.length,
+        partialPreview: partial.length <= 50 ? partial : `${partial.slice(0, 50)}...`,
+        partialCommittedLength: this.partialCommittedLength,
+        hasNewCharacters,
+        timeSinceLastUpdate,
+        force,
+        timestamp: Date.now(),
+      });
+    }
 
     // タイムアウトによる強制送信の条件を追加
     const shouldForceByTimeout = timeSinceLastUpdate > PARTIAL_COMMIT_DELAY_MS && partial.length >= MIN_PARTIAL_TEXT_LENGTH;
@@ -282,7 +253,7 @@ export class LiveSegmenter {
     }
 
     // 強制送信時の詳細ログ
-    if (shouldForceByTimeout) {
+    if (shouldForceByTimeout && SEGMENT_DEBUG) {
       console.warn("[debug.partial_timeout_force_commit]", {
         turnId: this.turnId,
         partialLength: partial.length,
@@ -294,6 +265,14 @@ export class LiveSegmenter {
     this.commitAudioSegment();
     this.pendingTexts.push(partial);
     this.partialCommittedLength = partial.length;
+
+    if (SEGMENT_DEBUG) {
+      const preview = partial.length <= 80 ? partial : `${partial.slice(0, 80)}…`;
+      const safePreview = JSON.stringify(preview);
+      console.info(
+        `[rx] partial=${safePreview}; buffer_len=${this.currentTranscript.trim().length}`
+      );
+    }
   }
 
   private ingestAudioChunk(buffer: Buffer): void {
@@ -563,22 +542,10 @@ export class LiveSegmenter {
       if (typeof record.serverContent === "object" && record.serverContent !== null) {
         const serverContent = record.serverContent as Record<string, unknown>;
         analysis.serverContentKeys = Object.keys(serverContent);
-        
-        if (Array.isArray(serverContent.candidates)) {
-          analysis.candidatesCount = serverContent.candidates.length;
-          analysis.candidatesAnalysis = serverContent.candidates.slice(0, 2).map((candidate: unknown) => {
-            if (typeof candidate === "object" && candidate !== null) {
-              const cand = candidate as Record<string, unknown>;
-              return {
-                hasContent: !!cand.content,
-                finishReason: cand.finishReason,
-                contentType: typeof cand.content,
-                // PII回避のため内容は記録しない
-              };
-            }
-            return { type: typeof candidate };
-          });
-        }
+        analysis.serverContentFlags = {
+          generationComplete: serverContent.generationComplete === true,
+          turnComplete: serverContent.turnComplete === true,
+        };
       }
     }
 

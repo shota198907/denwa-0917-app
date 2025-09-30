@@ -14,34 +14,10 @@ export const CAPTION_BLOCKLIST: ReadonlyArray<RegExp> = [
 
 const TERMINAL_CHARACTERS = new Set(["。", "．", ".", "？", "?", "！", "!", "…"]);
 
-const TEXT_CONTAINER_KEYS = new Set([
-  "serverContent",
-  "server_content",
-  "modelResponse",
-  "model_response",
-  "response",
-  "output",
-  "outputs",
-  "candidates",
-  "content",
-  "contents",
-  "parts",
-  "finalResponse",
-  "final_response",
-  "generations",
-]);
-
-const TEXT_VALUE_KEYS = new Set([
-  "text",
-  "finalText",
-  "final_text",
-  "responseText",
-  "response_text",
-  "outputText",
-  "output_text",
-  "transcript",
-  "transcription",
-]);
+const OUTPUT_TRANSCRIPTION_KEYS = new Set(["outputTranscription", "output_transcription"]);
+const MODEL_TURN_KEYS = new Set(["modelTurn", "model_turn"]);
+const SERVER_CONTENT_KEYS = new Set(["serverContent", "server_content"]);
+const MAX_WALK_DEPTH = 12;
 
 const getNestedString = (source: Record<string, unknown>, path: string[]): string | null => {
   let cursor: unknown = source;
@@ -50,43 +26,6 @@ const getNestedString = (source: Record<string, unknown>, path: string[]): strin
     cursor = (cursor as Record<string, unknown>)[segment];
   }
   return typeof cursor === "string" ? cursor : null;
-};
-
-const collectTextCandidates = (
-  value: unknown,
-  depth = 0,
-  seen: Set<unknown> = new Set()
-): string[] => {
-  if (depth > 8 || value === null || value === undefined) return [];
-  if (typeof value === "string") return [value];
-  if (Array.isArray(value)) {
-    const aggregated: string[] = [];
-    for (const entry of value) {
-      aggregated.push(...collectTextCandidates(entry, depth + 1, seen));
-    }
-    return aggregated;
-  }
-  if (typeof value !== "object") {
-    return [];
-  }
-  if (seen.has(value)) {
-    return [];
-  }
-  seen.add(value);
-
-  const result: string[] = [];
-  const record = value as Record<string, unknown>;
-  for (const [key, child] of Object.entries(record)) {
-    if (TEXT_VALUE_KEYS.has(key) && typeof child === "string") {
-      result.push(child);
-      continue;
-    }
-    if (TEXT_CONTAINER_KEYS.has(key)) {
-      result.push(...collectTextCandidates(child, depth + 1, seen));
-      continue;
-    }
-  }
-  return result;
 };
 
 export interface CaptionGuardResult {
@@ -119,41 +58,76 @@ export const extractCaption = (payload: unknown): string | null => {
   const serverText = getNestedString(record, ["serverContent", "outputTranscription", "text"]);
   if (typeof serverText === "string") return serverText;
 
-  const candidates = collectTextCandidates(record);
-  return selectBestCandidate(candidates);
+  return findOutputTranscriptionText(record, 0, new Set());
 };
 
-const selectBestCandidate = (candidates: string[]): string | null => {
-  let best: string | null = null;
-  let bestScore = Number.NEGATIVE_INFINITY;
-  const seen = new Set<string>();
+const findOutputTranscriptionText = (
+  value: unknown,
+  depth: number,
+  seen: Set<unknown>
+): string | null => {
+  if (depth > MAX_WALK_DEPTH || value === null || value === undefined) {
+    return null;
+  }
 
-  for (const candidate of candidates) {
-    if (typeof candidate !== "string") continue;
-    const trimmed = candidate.trim();
-    if (!trimmed || seen.has(trimmed)) continue;
-    seen.add(trimmed);
-    const score = computeCandidateScore(trimmed);
-    if (score > bestScore || (score === bestScore && best && trimmed.length > best.length)) {
-      best = trimmed;
-      bestScore = score;
+  if (typeof value === "string") {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = findOutputTranscriptionText(entry, depth + 1, seen);
+      if (found) {
+        return found;
+      }
+    }
+    return null;
+  }
+
+  if (typeof value !== "object") {
+    return null;
+  }
+
+  if (seen.has(value)) {
+    return null;
+  }
+  seen.add(value);
+
+  const record = value as Record<string, unknown>;
+  for (const key of OUTPUT_TRANSCRIPTION_KEYS) {
+    const container = record[key];
+    if (container && typeof container === "object") {
+      const text = (container as Record<string, unknown>).text;
+      if (typeof text === "string" && text.trim().length > 0) {
+        return text;
+      }
     }
   }
 
-  return best;
-};
+  for (const key of MODEL_TURN_KEYS) {
+    if (key in record) {
+      const nested = findOutputTranscriptionText(record[key], depth + 1, seen);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
 
-const computeCandidateScore = (text: string): number => {
-  let score = text.length;
-  const lastChar = text.length > 0 ? text[text.length - 1] : "";
-  if (lastChar && TERMINAL_CHARACTERS.has(lastChar)) {
-    score += 10;
+  for (const key of SERVER_CONTENT_KEYS) {
+    if (key in record) {
+      const nested = findOutputTranscriptionText(record[key], depth + 1, seen);
+      if (nested) {
+        return nested;
+      }
+    }
   }
-  if (/\s/.test(text)) {
-    score += 2;
+
+  for (const child of Object.values(record)) {
+    const nested = findOutputTranscriptionText(child, depth + 1, seen);
+    if (nested) {
+      return nested;
+    }
   }
-  if (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text)) {
-    score += 1;
-  }
-  return score;
+
+  return null;
 };

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LiveAudioSession } from "../lib/ws-audio";
 import { useVAD } from "../hooks/useVAD";
-import { useSilencePrompt } from "../hooks/useSilencePrompt";
 import { useConversation } from "../hooks/useConversation";
 import { AUDIO_ONLY_LABEL } from "../lib/caption-helpers";
 import {
@@ -69,9 +68,17 @@ interface SummaryLogEntry extends SummaryLogEntryPayload {
 
 const MAX_LOG_ENTRIES = 50;
 const MAX_SUMMARY_LOG_ENTRIES = 60;
-const SILENCE_PROMPT_TEXT = "少々お待ちしています。何かお手伝いできることはありますか？";
 const TERMINAL_PUNCTUATION = /[。．.？！?!…]$/;
 const CAPTION_PENDING_LABEL = "（応答生成中…）";
+
+const booleanFromEnv = (value: string | undefined): boolean => {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+};
+
+const SEGMENT_DEBUG = booleanFromEnv(import.meta.env?.VITE_SEGMENT_DEBUG as string | undefined);
+const PLAYER_DEBUG = booleanFromEnv(import.meta.env?.VITE_PLAYER_DEBUG as string | undefined);
 
 const fmtTime = (date: Date): string => date.toISOString();
 
@@ -109,7 +116,6 @@ export const LiveTestPage: React.FC = () => {
     commitAssistantTurn,
     clearHistory,
     setTranscriptionDisabled,
-    setUserTranscriptionEnabled,
     handleInterruption,
     updateAudioStatus,
   } = useConversation();
@@ -127,6 +133,12 @@ export const LiveTestPage: React.FC = () => {
    * UIログとサマリーログへ書き込む。生ログは保持しつつ、サマリーはノイズを除去して整形する。
    */
   const pushLog = useCallback((message: string) => {
+    if (!PLAYER_DEBUG && message.includes("[player:")) {
+      return;
+    }
+    if (!SEGMENT_DEBUG && message.includes("[diag:segment]")) {
+      return;
+    }
     const timestamp = fmtTime(new Date());
     const logId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setLogs((prev) => {
@@ -344,18 +356,6 @@ export const LiveTestPage: React.FC = () => {
     },
   });
 
-  const { shouldPrompt, acknowledge, reset: resetSilencePrompt } = useSilencePrompt(isSpeech);
-
-  useEffect(() => {
-    if (!shouldPrompt) return;
-    pushLog("[prompt] 5s silence detected; sending prompt text");
-    const session = sessionRef.current;
-    if (session && session.isConnected()) {
-      session.sendText(SILENCE_PROMPT_TEXT);
-    }
-    acknowledge();
-  }, [acknowledge, pushLog, shouldPrompt]);
-
   const connect = useCallback(async () => {
     const session = ensureSession();
     if (!session) return;
@@ -377,16 +377,15 @@ export const LiveTestPage: React.FC = () => {
   const disconnect = useCallback(() => {
     sessionRef.current?.disconnect();
     detach();
-    resetSilencePrompt();
     setIsConnected(false);
     setIsConnecting(false);
     setIsMicActive(false);
-    
+
     // 会話状態をリセット
     endUserSpeaking(true);
     endAssistantSpeaking(true);
     updateAudioStatus(false, false);
-  }, [detach, resetSilencePrompt, endUserSpeaking, endAssistantSpeaking, updateAudioStatus]);
+  }, [detach, endUserSpeaking, endAssistantSpeaking, updateAudioStatus]);
 
   const sendText = useCallback(() => {
     const text = pendingText.trim();
@@ -414,55 +413,51 @@ export const LiveTestPage: React.FC = () => {
       const stream = await session.startMic();
       const context = await session.getAudioContext();
       attach({ stream, audioContext: context });
-      resetSilencePrompt();
       setIsMicActive(true);
-      
+
       // 文字起こし機能が無効な場合の表示
       setTranscriptionDisabled();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       pushLog(`[error] mic start failed: ${message}`);
     }
-  }, [attach, ensureSession, pushLog, resetSilencePrompt, setTranscriptionDisabled, setUserTranscriptionEnabled]);
+  }, [attach, ensureSession, pushLog, setTranscriptionDisabled]);
 
   const stopMic = useCallback(() => {
     const session = sessionRef.current;
     if (!session) return;
     session.stopMic();
     detach();
-    resetSilencePrompt();
     setIsMicActive(false);
-  }, [detach, resetSilencePrompt]);
+  }, [detach]);
 
   useEffect(() => {
     return () => {
       sessionRef.current?.disconnect();
       sessionRef.current = null;
       detach();
-      resetSilencePrompt();
-      
+
       // 会話状態をリセット
       endUserSpeaking(true);
       endAssistantSpeaking(true);
       updateAudioStatus(false, false);
     };
-  }, [detach, resetSilencePrompt, endUserSpeaking, endAssistantSpeaking, updateAudioStatus, handleInterruption]);
+  }, [detach, endUserSpeaking, endAssistantSpeaking, updateAudioStatus, handleInterruption]);
 
   useEffect(() => {
     if (!wsUrl) {
       sessionRef.current?.disconnect();
       sessionRef.current = null;
       detach();
-      resetSilencePrompt();
       setIsConnected(false);
       setIsConnecting(false);
-      
+
       // 会話状態をリセット
       endUserSpeaking(true);
       endAssistantSpeaking(true);
       updateAudioStatus(false, false);
     }
-  }, [detach, resetSilencePrompt, wsUrl, endUserSpeaking, endAssistantSpeaking, updateAudioStatus, handleInterruption]);
+  }, [detach, wsUrl, endUserSpeaking, endAssistantSpeaking, updateAudioStatus, handleInterruption]);
 
   const summaryMode = logView === "summary";
 
