@@ -16,20 +16,7 @@ const loadHelpers = async () => {
   return import(`data:text/javascript;base64,${encoded}`);
 };
 
-test("extractCaption prefers longest candidate", async () => {
-  const { extractCaption } = await loadHelpers();
-  const payload = {
-    outputs: [
-      { text: "？" },
-      { text: "おはようございます。" },
-      { text: "お" },
-    ],
-  };
-  const caption = extractCaption(payload);
-  assert.equal(caption, "おはようございます。");
-});
-
-test("extractCaption falls back to nested keys", async () => {
+test("extractCaption reads outputTranscription text", async () => {
   const { extractCaption } = await loadHelpers();
   const payload = {
     serverContent: {
@@ -39,4 +26,19 @@ test("extractCaption falls back to nested keys", async () => {
   };
   const caption = extractCaption(payload);
   assert.equal(caption, "直接検出");
+});
+
+test("extractCaption walks nested modelTurn structures", async () => {
+  const { extractCaption } = await loadHelpers();
+  const payload = {
+    modelTurn: [
+      {
+        data: {
+          outputTranscription: { text: "ネスト検出" },
+        },
+      },
+    ],
+  };
+  const caption = extractCaption(payload);
+  assert.equal(caption, "ネスト検出");
 });

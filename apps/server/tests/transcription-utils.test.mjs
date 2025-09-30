@@ -16,19 +16,6 @@ const loadModule = async () => {
   return import(`data:text/javascript;base64,${encoded}`);
 };
 
-test("extractTranscript selects longest candidate", async () => {
-  const { extractTranscript } = await loadModule();
-  const payload = {
-    outputs: [
-      { text: "？" },
-      { text: "おはようございます。" },
-      { text: "お" },
-    ],
-  };
-  const transcript = extractTranscript(payload);
-  assert.equal(transcript, "おはようございます。");
-});
-
 test("extractTranscript prefers direct outputTranscription", async () => {
   const { extractTranscript } = await loadModule();
   const payload = {
@@ -41,17 +28,19 @@ test("extractTranscript prefers direct outputTranscription", async () => {
   assert.equal(transcript, "優先テキスト");
 });
 
-test("inspectTranscriptPayload summarizes candidates", async () => {
-  const { inspectTranscriptPayload } = await loadModule();
+test("extractTranscript resolves nested modelTurn outputTranscription", async () => {
+  const { extractTranscript } = await loadModule();
   const payload = {
-    outputs: [
-      { text: "？" },
-      { text: "おはようございます。" },
-      { text: "おはよう" },
+    modelTurn: [
+      {
+        generation: {
+          output: {
+            outputTranscription: { text: "ネストされたテキスト。" },
+          },
+        },
+      },
     ],
   };
-  const diagnostics = inspectTranscriptPayload(payload);
-  assert.ok(diagnostics);
-  assert.equal(diagnostics.bestCandidate, "おはようございます。");
-  assert.ok(diagnostics.candidates.length >= 2);
+  const transcript = extractTranscript(payload);
+  assert.equal(transcript, "ネストされたテキスト。");
 });

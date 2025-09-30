@@ -134,14 +134,6 @@ interface SegmentDiagnosticsEventPayload {
   readonly pendingTextCount: number;
   readonly pendingTextLength: number;
   readonly pendingAudioBytes: number;
-  readonly bestCandidateLength: number;
-  readonly bestCandidatePreview?: string | null;
-  readonly candidateCount: number;
-  readonly candidateSummaries?: ReadonlyArray<{
-    readonly length: number;
-    readonly score: number;
-    readonly preview: string;
-  }>;
   readonly audioChunkCount: number;
   readonly audioChunkBytes: number;
   readonly audioChunkMin?: number;
@@ -200,7 +192,6 @@ const isSegmentDiagnosticsEvent = (value: unknown): value is SegmentDiagnosticsE
     typeof value.pendingTextCount === "number" &&
     typeof value.pendingTextLength === "number" &&
     typeof value.pendingAudioBytes === "number" &&
-    typeof value.bestCandidateLength === "number" &&
     typeof value.audioChunkCount === "number" &&
     typeof value.audioChunkBytes === "number" &&
     typeof value.zeroAudioSegments === "number"
@@ -1020,8 +1011,7 @@ export class LiveAudioSession {
   private handleSegmentDiagnosticsEvent(event: SegmentDiagnosticsEventPayload): void {
     const parts: string[] = [
       `turn=${event.turnId}`,
-      `best_len=${event.bestCandidateLength}`,
-      `candidates=${event.candidateCount}`,
+      `transcript=${event.transcriptLength}`,
       `partial=${event.partialLength}`,
       `pending_text=${event.pendingTextLength}`,
       `pending_audio=${event.pendingAudioBytes}`,
@@ -1029,12 +1019,11 @@ export class LiveAudioSession {
       `audio_bytes=${event.audioChunkBytes}`,
       `zero_segments=${event.zeroAudioSegments}`,
     ];
-    if (typeof event.bestCandidatePreview === "string" && event.bestCandidatePreview.trim().length > 0) {
-      const preview =
-        event.bestCandidatePreview.length <= 60
-          ? event.bestCandidatePreview
-          : `${event.bestCandidatePreview.slice(0, 60)}…`;
-      parts.push(`preview=${preview}`);
+    if (typeof event.audioChunkMin === "number") {
+      parts.push(`audio_min=${event.audioChunkMin}`);
+    }
+    if (typeof event.audioChunkMax === "number") {
+      parts.push(`audio_max=${event.audioChunkMax}`);
     }
     this.log(`[diag:segment] ${parts.join(" ")}`);
   }

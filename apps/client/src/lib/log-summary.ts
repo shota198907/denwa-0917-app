@@ -370,14 +370,29 @@ const summarizeCaptionMetricsSession = (body: string): SummaryLogEntryPayload =>
 const summarizeSegmentDiagnostics = (body: string): SummaryLogEntryPayload => {
   const kv = parseKeyValueSegments(body);
   const turn = kv.turn ?? kv.turnId ?? "n/a";
-  const bestLen = kv.best_len ?? kv.bestCandidateLength ?? "0";
+  const transcriptLen = kv.transcript ?? kv.transcriptLength ?? "0";
   const audioBytes = kv.audio_bytes ?? kv.audioChunkBytes ?? "0";
   const zeroSegments = kv.zero_segments ?? kv.zeroAudioSegments ?? "0";
-  const preview = kv.preview ?? kv.bestCandidatePreview ?? "";
-  const importance = parseInt(zeroSegments, 10) > 0 || parseInt(bestLen, 10) <= 4 ? "warn" : "info";
-  const messageParts = [`turn=${turn}`, `best_len=${bestLen}`, `audio_bytes=${audioBytes}`, `zero_segments=${zeroSegments}`];
-  if (preview) {
-    messageParts.push(`preview=${preview}`);
+  const partial = kv.partial ?? kv.partialLength ?? "0";
+  const pendingText = kv.pending_text ?? kv.pendingTextLength ?? "0";
+  const pendingAudio = kv.pending_audio ?? kv.pendingAudioBytes ?? "0";
+  const audioMin = kv.audio_min ?? kv.audioChunkMin ?? "";
+  const audioMax = kv.audio_max ?? kv.audioChunkMax ?? "";
+  const importance = parseInt(zeroSegments, 10) > 0 ? "warn" : "info";
+  const messageParts = [
+    `turn=${turn}`,
+    `transcript=${transcriptLen}`,
+    `partial=${partial}`,
+    `pending_text=${pendingText}`,
+    `pending_audio=${pendingAudio}`,
+    `audio_bytes=${audioBytes}`,
+    `zero_segments=${zeroSegments}`,
+  ];
+  if (audioMin) {
+    messageParts.push(`audio_min=${audioMin}`);
+  }
+  if (audioMax) {
+    messageParts.push(`audio_max=${audioMax}`);
   }
   return {
     category: "セグメント診断",

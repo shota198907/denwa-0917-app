@@ -105,17 +105,35 @@ export class ConversationStore {
 
   /**
    * アシスタントの発言開始
+   * すでに同じターンで話している場合はテキストを保持する
    */
   public startAssistantSpeaking(turnId?: number): void {
+    const isContinuation =
+      this.isAssistantSpeaking &&
+      (turnId === undefined ||
+        this.currentAssistantTurnId === undefined ||
+        this.currentAssistantTurnId === turnId);
+
+    if (!isContinuation) {
+      this.currentAssistantText = '';
+    }
+
     this.isAssistantSpeaking = true;
-    this.currentAssistantText = '';
-    this.currentAssistantTurnId = turnId;
+
+    if (turnId !== undefined) {
+      this.currentAssistantTurnId = turnId;
+    } else if (!isContinuation) {
+      // ターンIDが未指定でも、新しいターン開始時は初期化
+      this.currentAssistantTurnId = undefined;
+    }
+
     this.lastActivity = new Date();
   }
 
   /**
    * アシスタントの発言更新
    * 鐘（ターン終了）が来るまでテキストを蓄積する
+   * 断片の順序ズレや重複を考慮しつつ自然に連結する
    */
   public updateAssistantText(text: string): void {
     if (!this.isAssistantSpeaking) {
@@ -123,13 +141,66 @@ export class ConversationStore {
     }
 
     const trimmed = text.trim();
-    
-    // アシスタントの場合は切れ端でも蓄積（鐘で確定されるため）
-    if (trimmed.length > 0) {
-      // 既存のテキストに追加（鐘で確定されるまで）
+
+    if (trimmed.length === 0) {
+      return;
+    }
+
+    const previous = this.currentAssistantText;
+
+    if (previous.length === 0) {
       this.currentAssistantText = trimmed;
       this.lastActivity = new Date();
+      return;
     }
+
+    if (trimmed === previous) {
+      this.lastActivity = new Date();
+      return;
+    }
+
+    if (trimmed.length < previous.length) {
+      this.lastActivity = new Date();
+      return;
+    }
+
+    if (trimmed.includes(previous)) {
+      this.currentAssistantText = trimmed;
+      this.lastActivity = new Date();
+      return;
+    }
+
+    if (previous.includes(trimmed)) {
+      return;
+    }
+
+    const overlap = this.findOverlapLength(previous, trimmed);
+    const appended = trimmed.slice(overlap);
+
+    if (appended.length === 0) {
+      return;
+    }
+
+    this.currentAssistantText = `${previous}${appended}`;
+    this.lastActivity = new Date();
+  }
+
+  /**
+   * 末尾と先頭の重なりを調べて自然な連結位置を返す
+   */
+  private findOverlapLength(previous: string, next: string): number {
+    const max = Math.min(previous.length, next.length);
+
+    for (let length = max; length > 0; length -= 1) {
+      const suffix = previous.slice(previous.length - length);
+      const prefix = next.slice(0, length);
+
+      if (suffix === prefix) {
+        return length;
+      }
+    }
+
+    return 0;
   }
 
   /**
